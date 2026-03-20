@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>翻翻乐</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            overflow: hidden;
+        }
+
+        .game-container {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .player-panel {
+            width: 200px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .player-panel.left {
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+
+        .player-panel.right {
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .player-panel.active {
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.3);
+            border-color: rgba(255, 215, 0, 0.5);
+        }
+
+        .player-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .player-name {
+            color: #fff;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .player-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+        }
+
+        .player-score {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+
+        .score-value {
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
+        .score-label {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        .player-cards {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            padding: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .player-cards-title {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .cards-collection {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            align-content: flex-start;
+        }
+
+        .collected-card {
+            font-size: 24px;
+            animation: dropIn 0.5s ease;
+            transition: transform 0.2s;
+        }
+
+        .collected-card:hover {
+            transform: scale(1.2);
+        }
+
+        @keyframes dropIn {
+            0% { transform: translateY(-50px); opacity: 0; }
+            60% { transform: translateY(10px); }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .game-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .game-title {
+            color: #ffd700;
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            margin-bottom: 10px;
+        }
+
+        .game-status {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+        }
+
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .card {
+            width: 85px;
+            height: 85px;
+            perspective: 1000px;
+            cursor: pointer;
+        }
+
+        .card-inner {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.5s ease;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card.matched .card-inner {
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.5s ease;
+        }
+
+        .card.show-front .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+        }
+
+        .card-back {
+            background: linear-gradient(145deg, #3b82f6 0%, #1d4ed8 100%);
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-back::before {
+            content: '❓';
+            font-size: 28px;
+            opacity: 0.5;
+        }
+
+        .card-front {
+            background: linear-gradient(145deg, #ffffff 0%, #f0f0f0 100%);
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transform: rotateY(180deg);
+        }
+
+        .card:hover:not(.flipped):not(.matched):not(.show-front) .card-inner {
+            transform: scale(1.05);
+        }
+
+        .card.disabled {
+            pointer-events: none;
+        }
+
+        .waiting-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .waiting-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid rgba(255, 215, 0, 0.5);
+        }
+
+        .waiting-title {
+            color: #ffd700;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        .waiting-text {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .waiting-players {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .waiting-player {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 25px;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 16px;
+        }
+
+        .waiting-player.host {
+            border: 2px solid #ffd700;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #ffd700 0%, #ffb800 100%);
+            color: #1a1a1a;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .result-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        .result-modal.show {
+            display: flex;
+        }
+
+        .result-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid #ffd700;
+        }
+
+        .result-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #ffd700;
+        }
+
+        .result-score {
+            color: #fff;
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .turn-indicator {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 215, 0, 0.95);
+            color: #1a1a1a;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 50;
+            display: none;
+        }
+
+        .turn-indicator.show {
+            display: block;
+            animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.05); }
+        }
+
+        .flying-card {
+            position: fixed;
+            font-size: 36px;
+            z-index: 1000;
+            pointer-events: none;
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .celebration {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .confetti {
+            position: absolute;
+            font-size: 24px;
+            animation: fall 3s ease-in-out forwards;
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+
+        .countdown-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 150;
+        }
+
+        .countdown-number {
+            font-size: 150px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 50px rgba(255, 215, 0, 0.8);
+            animation: countdownPulse 1s ease-in-out;
+        }
+
+        @keyframes countdownPulse {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .exit-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(239, 68, 68, 0.8);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s;
+        }
+
+        .exit-btn:hover {
+            background: rgba(239, 68, 68, 1);
+            transform: scale(1.05);
+        }
+
+        .score-popup {
+            position: fixed;
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+            pointer-events: none;
+            z-index: 1000;
+            animation: scorePopup 1s ease-out forwards;
+        }
+
+        @keyframes scorePopup {
+            0% { transform: scale(0.5) translateY(0); opacity: 1; }
+            50% { transform: scale(1.5) translateY(-30px); opacity: 1; }
+            100% { transform: scale(1) translateY(-60px); opacity: 0; }
+        }
+
+        .score-panel-effect {
+            animation: scorePanelPulse 0.5s ease;
+        }
+
+        @keyframes scorePanelPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); box-shadow: 0 0 30px rgba(255, 215, 0, 0.8); }
+            100% { transform: scale(1); }
+        }
+
+        .particle {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        @keyframes particleFly {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <button class="exit-btn" id="exitGameBtn">退出游戏</button>
+    <div class="turn-indicator" id="turnIndicator">轮到你翻牌！</div>
+
+    <div class="game-container">
+        <div class="player-panel left" id="player1Panel">
+            <div class="player-header">
+                <div class="player-name" id="player1Name">玩家1</div>
+                <div class="player-label">蓝方</div>
+            </div>
+            <div class="player-score">
+                <div class="score-value" id="player1Score">0</div>
+                <div class="score-label">得分</div>
+            </div>
+            <div class="player-cards">
+                <div class="player-cards-title">收集的卡牌</div>
+                <div class="cards-collection" id="player1Cards"></div>
+            </div>
+        </div>
+
+        <div class="game-area">
+            <div class="game-header">
+                <div class="game-title">🎴 翻翻乐</div>
+                <div class="game-status" id="gameStatus">等待开始</div>
+            </div>
+            <div class="cards-grid" id="cardsGrid"></div>
+        </div>
+
+        <div class="player-panel right" id="player2Panel">
+            <div class="player-header">
+                <div class="player-name" id="player2Name">玩家2</div>
+                <div class="player-label">红方</div>
+            </div>
+            <div class="player-score">
+                <div class="score-value" id="player2Score">0</div>
+                <div class="score-label">得分</div>
+            </div>
+            <div class="player-cards">
+                <div class="player-cards-title">收集的卡牌</div>
+                <div class="cards-collection" id="player2Cards"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="waiting-overlay" id="waitingOverlay">
+        <div class="waiting-content">
+            <div class="waiting-title">🎴 翻翻乐</div>
+            <div class="waiting-text">等待玩家加入...</div>
+            <div class="waiting-players" id="waitingPlayers"></div>
+            <button class="btn btn-primary" id="startBtn" style="display: none;">开始游戏</button>
+        </div>
+    </div>
+
+    <div class="result-modal" id="resultModal">
+        <div class="result-content">
+            <div class="result-icon" id="resultIcon">🏆</div>
+            <div class="result-title" id="resultTitle">游戏结束</div>
+            <div class="result-score" id="resultScore"></div>
+            <button class="btn btn-primary" id="exitBtn">确认退出</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room');
+        const isHost = urlParams.get('host') === 'true';
+        const playerName = urlParams.get('name') || localStorage.getItem('chatUsername') || '玩家';
+
+        let socket = null;
+        let cards = [];
+        let myPlayerIndex = -1;
+        let currentTurn = 0;
+        let gameOver = false;
+        let canFlip = true;
+        let audioContext = null;
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playFlipSound() {
+            initAudio();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(600, audioContext.currentTime + 0.1);
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.1);
+        }
+
+        function playMatchSound() {
+            initAudio();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(523, audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(659, audioContext.currentTime + 0.1);
+            oscillator.frequency.setValueAtTime(784, audioContext.currentTime + 0.2);
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
+
+        function playNoMatchSound() {
+            initAudio();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(300, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(200, audioContext.currentTime + 0.2);
+            
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.2);
+        }
+
+        function showScoreEffect(playerIndex, score) {
+            const scoreEl = document.getElementById(`player${playerIndex + 1}Score`);
+            const rect = scoreEl.getBoundingClientRect();
+            
+            // 分数弹出动画
+            const popup = document.createElement('div');
+            popup.className = 'score-popup';
+            popup.textContent = '+1';
+            popup.style.left = rect.left + rect.width / 2 - 30 + 'px';
+            popup.style.top = rect.top + 'px';
+            document.body.appendChild(popup);
+            
+            setTimeout(() => popup.remove(), 1000);
+            
+            // 分数面板闪烁
+            const panel = scoreEl.parentElement;
+            panel.classList.add('score-panel-effect');
+            setTimeout(() => panel.classList.remove('score-panel-effect'), 500);
+            
+            // 粒子效果
+            createParticles(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        }
+
+        function createParticles(x, y) {
+            const colors = ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#ff9ff3'];
+            
+            for (let i = 0; i < 12; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = x + 'px';
+                particle.style.top = y + 'px';
+                particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                const angle = (Math.PI * 2 / 12) * i;
+                const distance = 50 + Math.random() * 50;
+                const tx = Math.cos(angle) * distance;
+                const ty = Math.sin(angle) * distance;
+                
+                particle.style.setProperty('--tx', tx + 'px');
+                particle.style.setProperty('--ty', ty + 'px');
+                particle.style.animation = 'particleFly 0.6s ease-out forwards';
+                
+                document.body.appendChild(particle);
+                setTimeout(() => particle.remove(), 600);
+            }
+        }
+
+        function connect() {
+            socket = io({
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                socket.emit('joinMemoryRoom', { roomId, playerName });
+            });
+
+            socket.on('waitingForMemoryPlayer', (data) => {
+                renderWaitingRoom(data);
+            });
+
+            socket.on('memoryRoomCreated', (data) => {
+            });
+
+            socket.on('memoryGameCountdown', (data) => {
+                document.getElementById('waitingOverlay').style.display = 'none';
+                document.getElementById('player1Name').textContent = data.players[0].name;
+                document.getElementById('player2Name').textContent = data.players[1].name;
+                document.getElementById('player1Score').textContent = '0';
+                document.getElementById('player2Score').textContent = '0';
+                
+                showCountdown(3);
+            });
+
+            socket.on('memoryGameStart', (data) => {
+                cards = data.cards;
+                currentTurn = data.currentTurn;
+                
+                const myName = playerName;
+                data.players.forEach((p, i) => {
+                    if (p.name === myName) {
+                        myPlayerIndex = i;
+                    }
+                });
+
+                renderCardsWithAnimation();
+            });
+
+            socket.on('memoryCardFlipped', (data) => {
+                flipCard(data.cardIndex, data.emoji);
+            });
+
+            socket.on('memoryMatch', (data) => {
+                canFlip = false;
+                
+                setTimeout(() => {
+                    matchCards(data.cardIndices, data.playerIndex, data.emoji);
+                    
+                    const scoreEl = document.getElementById(`player${data.playerIndex + 1}Score`);
+                    scoreEl.textContent = data.score;
+
+                    showScoreEffect(data.playerIndex, data.score);
+                    addCollectedCard(data.playerIndex, data.emoji);
+
+                    canFlip = true;
+                }, 500);
+            });
+
+            socket.on('memoryNoMatch', (data) => {
+                canFlip = false;
+                
+                setTimeout(() => {
+                    unflipCards(data.cardIndices);
+                    canFlip = true;
+                }, 500);
+            });
+
+            socket.on('memoryTurnChange', (data) => {
+                currentTurn = data.currentTurn;
+                updateTurnIndicator();
+            });
+
+            socket.on('memoryGameOver', (data) => {
+                gameOver = true;
+                showResult(data);
+            });
+
+            socket.on('error', (data) => {
+                alert(data.message);
+                const startBtn = document.getElementById('startBtn');
+                startBtn.disabled = false;
+                startBtn.textContent = '开始游戏';
+            });
+        }
+
+        function showCountdown(seconds) {
+            const overlay = document.createElement('div');
+            overlay.className = 'countdown-overlay';
+            overlay.id = 'countdownOverlay';
+            document.body.appendChild(overlay);
+
+            const number = document.createElement('div');
+            number.className = 'countdown-number';
+            number.id = 'countdownNumber';
+            overlay.appendChild(number);
+
+            let count = seconds;
+            number.textContent = count;
+
+            const interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    number.textContent = count;
+                    number.style.animation = 'none';
+                    void number.offsetWidth;
+                    number.style.animation = 'countdownPulse 1s ease-in-out';
+                } else {
+                    clearInterval(interval);
+                    overlay.remove();
+                }
+            }, 1000);
+        }
+
+        function renderWaitingRoom(data) {
+            const container = document.getElementById('waitingPlayers');
+            container.innerHTML = '';
+
+            data.players.forEach(p => {
+                const div = document.createElement('div');
+                div.className = 'waiting-player' + (p.isHost ? ' host' : '');
+                div.textContent = p.name + (p.isHost ? ' 👑' : '');
+                container.appendChild(div);
+            });
+
+            const startBtn = document.getElementById('startBtn');
+            if (data.players.length === 2) {
+                startBtn.style.display = 'inline-block';
+                if (!startBtn.disabled) {
+                    startBtn.textContent = '开始游戏';
+                    startBtn.onclick = () => {
+                        startBtn.disabled = true;
+                        startBtn.textContent = '准备中...';
+                        socket.emit('startMemoryGame', { roomId });
+                    };
+                }
+            } else {
+                startBtn.style.display = 'none';
+            }
+        }
+
+        function renderCardsWithAnimation() {
+            const grid = document.getElementById('cardsGrid');
+            grid.innerHTML = '';
+
+            cards.forEach((card, index) => {
+                const cardEl = document.createElement('div');
+                cardEl.className = 'card show-front';
+                cardEl.id = `card-${index}`;
+                cardEl.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-face card-back"></div>
+                        <div class="card-face card-front">${card.emoji}</div>
+                    </div>
+                `;
+                cardEl.onclick = () => handleCardClick(index);
+                grid.appendChild(cardEl);
+            });
+
+            document.getElementById('gameStatus').textContent = '记忆时间...';
+
+            setTimeout(() => {
+                flipAllCardsToBack();
+            }, 3000);
+        }
+
+        function flipAllCardsToBack() {
+            const cardEls = document.querySelectorAll('.card');
+            let delay = 0;
+            const totalCards = cardEls.length;
+            const flipInterval = 50;
+
+            cardEls.forEach((cardEl, index) => {
+                setTimeout(() => {
+                    cardEl.classList.remove('show-front');
+                    cardEl.classList.remove('flipped');
+                }, delay);
+                delay += flipInterval;
+            });
+
+            setTimeout(() => {
+                document.getElementById('gameStatus').textContent = '游戏进行中';
+                updateTurnIndicator();
+            }, delay + 500);
+        }
+
+        function handleCardClick(index) {
+            if (gameOver || !canFlip) return;
+            if (currentTurn !== myPlayerIndex) return;
+
+            const card = cards[index];
+            if (card.flipped || card.matched) return;
+
+            socket.emit('flipMemoryCard', { roomId, cardIndex: index });
+        }
+
+        function flipCard(index, emoji) {
+            playFlipSound();
+            const cardEl = document.getElementById(`card-${index}`);
+            cardEl.classList.add('flipped');
+            cards[index].flipped = true;
+        }
+
+        function unflipCards(indices) {
+            playNoMatchSound();
+            indices.forEach(index => {
+                const cardEl = document.getElementById(`card-${index}`);
+                cardEl.classList.remove('flipped');
+                cards[index].flipped = false;
+            });
+        }
+
+        function matchCards(indices, playerIndex, emoji) {
+            playMatchSound();
+            indices.forEach(index => {
+                const cardEl = document.getElementById(`card-${index}`);
+                cardEl.classList.add('matched');
+                cards[index].matched = true;
+            });
+
+            indices.forEach((index, i) => {
+                setTimeout(() => {
+                    animateCardFly(index, playerIndex, emoji);
+                }, i * 150);
+            });
+        }
+
+        function animateCardFly(cardIndex, playerIndex, emoji) {
+            const cardEl = document.getElementById(`card-${cardIndex}`);
+            const rect = cardEl.getBoundingClientRect();
+
+            const flyingCard = document.createElement('div');
+            flyingCard.className = 'flying-card';
+            flyingCard.textContent = emoji;
+            flyingCard.style.left = rect.left + 'px';
+            flyingCard.style.top = rect.top + 'px';
+            document.body.appendChild(flyingCard);
+
+            const targetPanel = document.getElementById(`player${playerIndex + 1}Cards`);
+            const targetRect = targetPanel.getBoundingClientRect();
+
+            requestAnimationFrame(() => {
+                flyingCard.style.left = targetRect.left + 20 + 'px';
+                flyingCard.style.top = targetRect.top + 50 + 'px';
+                flyingCard.style.opacity = '0';
+                flyingCard.style.transform = 'scale(0.5)';
+
+                setTimeout(() => flyingCard.remove(), 600);
+            });
+        }
+
+        function addCollectedCard(playerIndex, emoji) {
+            const container = document.getElementById(`player${playerIndex + 1}Cards`);
+            const card = document.createElement('div');
+            card.className = 'collected-card';
+            card.textContent = emoji;
+            container.appendChild(card);
+        }
+
+        function updateTurnIndicator() {
+            const indicator = document.getElementById('turnIndicator');
+            const player1Panel = document.getElementById('player1Panel');
+            const player2Panel = document.getElementById('player2Panel');
+
+            player1Panel.classList.remove('active');
+            player2Panel.classList.remove('active');
+
+            if (currentTurn === myPlayerIndex) {
+                indicator.textContent = '轮到你翻牌！';
+                indicator.classList.add('show');
+            } else {
+                indicator.classList.remove('show');
+            }
+
+            if (currentTurn === 0) {
+                player1Panel.classList.add('active');
+            } else {
+                player2Panel.classList.add('active');
+            }
+        }
+
+        function showResult(data) {
+            document.getElementById('exitGameBtn').style.display = 'none';
+            
+            const modal = document.getElementById('resultModal');
+            const icon = document.getElementById('resultIcon');
+            const title = document.getElementById('resultTitle');
+            const score = document.getElementById('resultScore');
+
+            if (data.reason === 'disconnect') {
+                // 对手退出，当前玩家获胜
+                if (data.winnerIndex === myPlayerIndex) {
+                    icon.textContent = '🏆';
+                    title.textContent = '对手退出，你获胜！';
+                    celebrate();
+                } else {
+                    icon.textContent = '😢';
+                    title.textContent = '你已退出游戏';
+                }
+            } else if (data.winnerIndex === -1) {
+                icon.textContent = '🤝';
+                title.textContent = '平局！';
+            } else if (data.winnerIndex === myPlayerIndex) {
+                icon.textContent = '🏆';
+                title.textContent = '恭喜你获胜！';
+                celebrate();
+            } else {
+                icon.textContent = '😢';
+                title.textContent = '再接再厉！';
+            }
+
+            score.textContent = `${data.players[0].name} ${data.players[0].score} : ${data.players[1].score} ${data.players[1].name}`;
+            modal.classList.add('show');
+        }
+
+        function celebrate() {
+            const container = document.createElement('div');
+            container.className = 'celebration';
+            document.body.appendChild(container);
+
+            const emojis = ['🎉', '🎊', '✨', '🌟', '💫', '🏆', '🥇', '👏'];
+            
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                    confetti.style.left = Math.random() * 100 + 'vw';
+                    confetti.style.animationDelay = Math.random() * 0.5 + 's';
+                    container.appendChild(confetti);
+
+                    setTimeout(() => confetti.remove(), 3000);
+                }, i * 50);
+            }
+
+            setTimeout(() => container.remove(), 4000);
+        }
+
+        document.getElementById('exitBtn').onclick = () => {
+            socket.emit('leaveMemoryRoom', { roomId });
+            window.close();
+        };
+
+        document.getElementById('exitGameBtn').onclick = () => {
+            if (confirm('确定要退出游戏吗？')) {
+                socket.emit('leaveMemoryRoom', { roomId });
+                window.close();
+            }
+        };
+
+        connect();
+    </script>
+</body>
+</html>

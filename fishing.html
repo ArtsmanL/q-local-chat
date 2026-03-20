@@ -1,0 +1,1802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金钩钓鱼</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .game-container {
+            width: 100vw;
+            height: 100vh;
+            background: 
+                repeating-linear-gradient(
+                    90deg,
+                    #1a5f3c 0px,
+                    #1a5f3c 2px,
+                    transparent 2px,
+                    transparent 20px
+                ),
+                repeating-linear-gradient(
+                    0deg,
+                    #1a5f3c 0px,
+                    #1a5f3c 2px,
+                    transparent 2px,
+                    transparent 20px
+                ),
+                linear-gradient(135deg, #1e6b45 0%, #155a38 50%, #0d4a2c 100%);
+            display: flex;
+            position: relative;
+        }
+
+        .left-panel {
+            width: 200px;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border-right: 2px solid rgba(255, 215, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        .panel-title {
+            color: #ffd700;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .my-cards {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding-top: 10px;
+        }
+
+        .cards-stack {
+            position: relative;
+            width: 70px;
+            min-height: 100px;
+        }
+
+        .stack-card {
+            position: absolute;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stack-card:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            z-index: 100 !important;
+        }
+
+        .center-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .game-title {
+            color: #ffd700;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-status {
+            color: #fff;
+            font-size: 16px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+        }
+
+        .game-board {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            border: 3px solid rgba(255, 215, 0, 0.4);
+            display: flex;
+            justify-content: center;
+            padding: 15px;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .board-cards-stack {
+            position: relative;
+            width: 60px;
+            min-height: 100px;
+        }
+
+        .board-card {
+            position: absolute;
+            left: 0;
+        }
+
+        .right-panel {
+            width: 180px;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border-left: 2px solid rgba(255, 215, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+        }
+
+        .player-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .player-item.active {
+            border-color: #ffd700;
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        .player-item.eliminated {
+            opacity: 0.5;
+            background: rgba(100, 100, 100, 0.3);
+        }
+
+        .player-name {
+            color: #fff;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .player-cards-count {
+            color: #ffd700;
+            font-size: 12px;
+        }
+
+        .card {
+            width: 60px;
+            height: 84px;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            cursor: default;
+            position: absolute;
+            transform-style: preserve-3d;
+            transition: transform 0.5s ease, left 0.5s ease, top 0.5s ease, opacity 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-front {
+            background: linear-gradient(145deg, #ffffff 0%, #f0f0f0 100%);
+            border: 2px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-back {
+            background: linear-gradient(145deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%);
+            border: 2px solid #3b82f6;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+        }
+
+        .card-back-design {
+            width: 48px;
+            height: 68px;
+            background: 
+                repeating-linear-gradient(
+                    45deg,
+                    transparent,
+                    transparent 4px,
+                    rgba(255, 255, 255, 0.1) 4px,
+                    rgba(255, 255, 255, 0.1) 8px
+                );
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #ffd700;
+            font-size: 28px;
+        }
+
+        .card-value {
+            font-size: 20px;
+        }
+
+        .card-suit {
+            font-size: 16px;
+            margin-top: 2px;
+        }
+
+        .card.red {
+            color: #dc2626;
+        }
+
+        .card.black {
+            color: #1f2937;
+        }
+
+        .card.joker-big {
+            color: #dc2626;
+            background: linear-gradient(145deg, #fff5f5 0%, #fee2e2 100%);
+        }
+
+        .card.joker-small {
+            color: #1f2937;
+            background: linear-gradient(145deg, #f9fafb 0%, #f3f4f6 100%);
+        }
+
+        .card-corner {
+            position: absolute;
+            font-size: 10px;
+            line-height: 1;
+        }
+
+        .card-corner.top-left {
+            top: 4px;
+            left: 4px;
+        }
+
+        .card-corner.bottom-right {
+            bottom: 4px;
+            right: 4px;
+            transform: rotate(180deg);
+        }
+
+        .card-mini {
+            width: 40px;
+            height: 56px;
+            font-size: 12px;
+        }
+
+        .card-mini .card-value {
+            font-size: 14px;
+        }
+
+        .card-mini .card-suit {
+            font-size: 12px;
+        }
+
+        .card-mini .card-corner {
+            font-size: 8px;
+        }
+
+        .card-mini .card-back-design {
+            width: 32px;
+            height: 44px;
+            font-size: 20px;
+        }
+
+        .action-area {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 15px;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #ffd700 0%, #ffb800 100%);
+            color: #1a1a1a;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+        }
+
+        .btn-primary:disabled {
+            background: #666;
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .waiting-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .waiting-content {
+            background: linear-gradient(135deg, #1e6b45 0%, #155a38 100%);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid #ffd700;
+        }
+
+        .waiting-title {
+            color: #ffd700;
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+
+        .waiting-players {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .waiting-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .waiting-player {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: #fff;
+        }
+
+        .waiting-player.host {
+            border: 2px solid #ffd700;
+        }
+
+        .result-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        .result-modal.show {
+            display: flex;
+        }
+
+        .result-content {
+            background: linear-gradient(135deg, #1e6b45 0%, #0d4a2c 100%);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            border: 3px solid #ffd700;
+        }
+
+        .result-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .result-title.win {
+            color: #ffd700;
+        }
+
+        .result-title.lose {
+            color: #9ca3af;
+        }
+
+        .result-rank {
+            color: #fff;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .result-btn {
+            padding: 12px 40px;
+            border: none;
+            border-radius: 25px;
+            background: linear-gradient(135deg, #ffd700 0%, #ffb800 100%);
+            color: #1a1a1a;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .turn-indicator {
+            position: fixed;
+            top: 56px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 215, 0, 0.95);
+            color: #1a1a1a;
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 50;
+            display: none;
+            white-space: nowrap;
+        }
+
+        .turn-indicator.show {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .turn-timer {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-family: monospace;
+            font-size: 18px;
+        }
+
+        .turn-timer.warning {
+            background: rgba(220, 38, 38, 0.3);
+            color: #dc2626;
+            animation: timerPulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes timerPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.02); }
+        }
+
+        .spectator-badge {
+            background: rgba(100, 100, 100, 0.5);
+            color: #ccc;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            margin-left: 8px;
+        }
+
+        .pay-cards-animation {
+            position: fixed;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .flying-card {
+            position: fixed;
+            z-index: 1000;
+            pointer-events: none;
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card.flipping {
+            animation: flipCard 0.6s ease forwards;
+        }
+
+        @keyframes flipCard {
+            0% { transform: rotateY(0deg); }
+            50% { transform: rotateY(90deg); }
+            100% { transform: rotateY(180deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 215, 0, 0.95);
+            color: #1a1a1a;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 1000;
+            animation: slideDown 0.3s ease, fadeOut 0.3s ease 2s forwards;
+        }
+
+        @keyframes slideDown {
+            from { top: -50px; opacity: 0; }
+            to { top: 20px; opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            to { opacity: 0; top: -50px; }
+        }
+
+        .rules-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            color: #ffd700;
+            padding: 6px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+            transition: all 0.3s;
+        }
+
+        .rules-btn:hover {
+            background: rgba(255, 215, 0, 0.3);
+        }
+
+        .rules-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+        }
+
+        .rules-modal.show {
+            display: flex;
+        }
+
+        .rules-content {
+            background: linear-gradient(135deg, #1e6b45 0%, #0d4a2c 100%);
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 3px solid #ffd700;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .rules-title {
+            color: #ffd700;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .rules-section {
+            margin-bottom: 15px;
+        }
+
+        .rules-section h3 {
+            color: #ffd700;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .rules-section p, .rules-section li {
+            color: #fff;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .rules-section ul {
+            padding-left: 20px;
+        }
+
+        .rules-section li {
+            margin-bottom: 5px;
+        }
+
+        .card-count-highlight {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        .player-cards-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .close-rules-btn {
+            display: block;
+            margin: 20px auto 0;
+            padding: 10px 30px;
+            background: linear-gradient(135deg, #ffd700 0%, #ffb800 100%);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .next-card-preview {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .next-card-label {
+            color: #ffd700;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .next-card-display {
+            display: flex;
+            justify-content: center;
+        }
+
+        .player-item.clickable {
+            cursor: pointer;
+        }
+
+        .player-item.clickable:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .player-item.viewing {
+            border: 2px solid #4ade80;
+            background: rgba(74, 222, 128, 0.2);
+        }
+
+        .spectator-hint {
+            color: #9ca3af;
+            font-size: 11px;
+            text-align: center;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+
+        .announcement-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 36px;
+            background: linear-gradient(90deg, rgba(0,0,0,0.9) 0%, rgba(30,60,40,0.95) 50%, rgba(0,0,0,0.9) 100%);
+            border-bottom: 2px solid rgba(255, 215, 0, 0.5);
+            z-index: 150;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .announcement-content {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            padding-left: 100%;
+        }
+
+        .announcement-content.scrolling {
+            animation: scrollAnnouncement 30s linear infinite;
+        }
+
+        .announcement-item {
+            display: inline-flex;
+            align-items: center;
+            margin-right: 100px;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .announcement-item .highlight {
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .announcement-item .card-name {
+            color: #4ade80;
+            font-weight: bold;
+        }
+
+        @keyframes scrollAnnouncement {
+            from { transform: translateX(0); }
+            to { transform: translateX(-50%); }
+        }
+
+        .celebration-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .celebration-particle {
+            position: absolute;
+            font-size: 24px;
+            pointer-events: none;
+        }
+
+        .game-container {
+            margin-top: 36px;
+        }
+    </style>
+</head>
+<body>
+    <div class="announcement-bar" id="announcementBar">
+        <div class="announcement-content" id="announcementContent">
+            <span class="announcement-item">🎣 欢迎来到金钩钓鱼！点击"规则"了解玩法</span>
+        </div>
+    </div>
+    <div class="game-container">
+        <div class="left-panel">
+            <div class="panel-title" id="panelTitle">我的牌 (<span id="myCardCount">0</span>张)</div>
+            <div class="next-card-preview" id="nextCardPreview">
+                <div class="next-card-label">下一张牌</div>
+                <div class="next-card-display" id="nextCardDisplay"></div>
+            </div>
+            <div class="my-cards" id="myCards">
+                <div class="cards-stack" id="cardsStack"></div>
+            </div>
+        </div>
+
+        <div class="center-area">
+            <div class="game-header">
+                <div class="game-title">
+                    🎣 金钩钓鱼
+                    <button class="rules-btn" id="rulesBtn">📖 规则</button>
+                </div>
+                <div class="game-status" id="gameStatus">
+                    <span id="gameTimer" style="margin-right: 15px; display: none;">⏱️ <span id="gameTimerValue">2:00</span></span>
+                    <span id="statusText">等待开始</span>
+                </div>
+            </div>
+
+            <div class="game-board" id="gameBoard"></div>
+
+            <div class="action-area">
+                <button class="btn btn-primary" id="playCardBtn" disabled>出牌</button>
+                <button class="btn btn-secondary" id="exitBtn">退出</button>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="panel-title">玩家</div>
+            <div id="playersList"></div>
+        </div>
+    </div>
+
+    <div class="waiting-overlay" id="waitingOverlay">
+        <div class="waiting-content">
+            <div class="waiting-title">🎣 金钩钓鱼</div>
+            <div class="waiting-players">等待玩家加入...</div>
+            <div class="waiting-list" id="waitingList"></div>
+            <button class="btn btn-primary" id="startGameBtn" style="display: none;">开始游戏</button>
+        </div>
+    </div>
+
+    <div class="result-modal" id="resultModal">
+        <div class="result-content">
+            <div class="result-icon" id="resultIcon">🏆</div>
+            <div class="result-title" id="resultTitle">游戏结束</div>
+            <div class="result-rank" id="resultRank"></div>
+            <button class="result-btn" id="resultBtn">确认退出</button>
+        </div>
+    </div>
+
+    <div class="turn-indicator" id="turnIndicator">
+        <span id="turnText">轮到你出牌！</span>
+        <span class="turn-timer" id="turnTimer">5</span>
+    </div>
+
+    <div class="rules-modal" id="rulesModal">
+        <div class="rules-content">
+            <div class="rules-title">📖 游戏规则</div>
+            <div class="rules-section">
+                <h3>🎯 游戏目标</h3>
+                <p>让其他所有玩家牌用完，成为最后的赢家！</p>
+            </div>
+            <div class="rules-section">
+                <h3>🃏 牌组</h3>
+                <p>54张牌：大王×1（红色）、小王×1（黑色）、四种花色A-K共52张</p>
+            </div>
+            <div class="rules-section">
+                <h3>📋 出牌规则</h3>
+                <ul>
+                    <li>玩家依次从牌堆顶部出一张牌到游戏区</li>
+                    <li><strong>数字相同</strong>：获得两张相同牌及中间所有牌，可继续出牌</li>
+                    <li><strong>出J</strong>：获得游戏区所有牌，可继续出牌</li>
+                    <li><strong>出Q</strong>：其他玩家各支付1张牌给你</li>
+                    <li><strong>出K</strong>：其他玩家各支付2张牌给你</li>
+                    <li><strong>出小王</strong>：其他玩家各支付3张牌给你</li>
+                    <li><strong>出大王</strong>：其他玩家各支付5张牌给你</li>
+                </ul>
+            </div>
+            <div class="rules-section">
+                <h3>⚠️ 支付规则</h3>
+                <p>支付不足时给全部牌后判败进入观战模式</p>
+            </div>
+            <div class="rules-section">
+                <h3>⏱️ 超时规则</h3>
+                <ul>
+                    <li><strong>回合超时</strong>：5秒不出牌，向其他玩家各支付1张牌</li>
+                    <li><strong>游戏限时</strong>：每场游戏限时2分钟</li>
+                    <li><strong>超时判定</strong>：时间到后按牌数排名，牌多者胜</li>
+                </ul>
+            </div>
+            <div class="rules-section">
+                <h3>🏆 胜负判定</h3>
+                <p>其他玩家均无牌即胜利，按淘汰顺序排名</p>
+            </div>
+            <button class="close-rules-btn" id="closeRulesBtn">知道了</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room');
+        const isHost = urlParams.get('host') === 'true';
+        const isSpectator = urlParams.get('spectator') === 'true';
+        const playerName = urlParams.get('name') || localStorage.getItem('chatUsername') || '玩家';
+
+        let socket = null;
+        let myCards = [];
+        let boardCards = [];
+        let players = [];
+        let currentTurn = 0;
+        let myPlayerIndex = -1;
+        let gameOver = false;
+        let isAnimating = false;
+        let viewingPlayerIndex = -1;
+
+        const suits = ['♠', '♥', '♦', '♣'];
+        const values = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        const redSuits = ['♥', '♦'];
+
+        function getCardDisplay(card) {
+            if (card.type === 'bigJoker') {
+                return { value: '王', suit: '', color: 'red', isJoker: true, jokerType: 'big' };
+            }
+            if (card.type === 'smallJoker') {
+                return { value: '王', suit: '', color: 'black', isJoker: true, jokerType: 'small' };
+            }
+            const isRed = redSuits.includes(card.suit);
+            return {
+                value: card.value,
+                suit: card.suit,
+                color: isRed ? 'red' : 'black',
+                isJoker: false
+            };
+        }
+
+        function createCardElement(card, isBack = false, isMini = false) {
+            const cardEl = document.createElement('div');
+            cardEl.className = `card ${isMini ? 'card-mini' : ''}`;
+
+            if (isBack) {
+                cardEl.classList.add('card-back');
+                cardEl.innerHTML = `<div class="card-back-design">🃏</div>`;
+                return cardEl;
+            }
+
+            const display = getCardDisplay(card);
+            cardEl.classList.add('card-front');
+            cardEl.classList.add(display.color);
+
+            if (display.isJoker) {
+                cardEl.classList.add(display.jokerType === 'big' ? 'joker-big' : 'joker-small');
+            }
+
+            const cornerContent = display.isJoker 
+                ? display.value 
+                : `${display.value}${display.suit}`;
+
+            cardEl.innerHTML = `
+                <div class="card-corner top-left">${cornerContent}</div>
+                <div class="card-value">${display.value}</div>
+                ${display.suit ? `<div class="card-suit">${display.suit}</div>` : ''}
+                <div class="card-corner bottom-right">${cornerContent}</div>
+            `;
+
+            return cardEl;
+        }
+
+        function renderMyCards() {
+            const container = document.getElementById('cardsStack');
+            container.innerHTML = '';
+
+            const panelTitle = document.getElementById('panelTitle');
+            const nextCardDisplay = document.getElementById('nextCardDisplay');
+            const nextCardPreview = document.getElementById('nextCardPreview');
+            nextCardDisplay.innerHTML = '';
+
+            if (isSpectator) {
+                nextCardPreview.querySelector('.next-card-label').textContent = '当前视角牌堆';
+                
+                if (viewingPlayerIndex >= 0) {
+                    const viewingPlayer = players[viewingPlayerIndex];
+                    panelTitle.innerHTML = `${viewingPlayer.name}的牌 (<span id="myCardCount">${viewingPlayer.cardCount}</span>张)`;
+                    
+                    if (viewingPlayer && !viewingPlayer.eliminated && viewingPlayer.cardCount > 0) {
+                        const cardEl = createCardElement({}, true, false);
+                        cardEl.style.position = 'relative';
+                        nextCardDisplay.appendChild(cardEl);
+                    } else {
+                        nextCardDisplay.innerHTML = '<span style="color:#9ca3af;font-size:12px;">无牌</span>';
+                    }
+                }
+            } else {
+                nextCardPreview.querySelector('.next-card-label').textContent = '下一张牌';
+                panelTitle.innerHTML = `我的牌 (<span id="myCardCount">${myCards.length}</span>张)`;
+                
+                if (myCards.length > 0) {
+                    const nextCard = myCards[0];
+                    const cardEl = createCardElement(nextCard, false, false);
+                    cardEl.style.position = 'relative';
+                    nextCardDisplay.appendChild(cardEl);
+                } else {
+                    nextCardDisplay.innerHTML = '<span style="color:#9ca3af;font-size:12px;">无牌</span>';
+                }
+
+                const displayCount = Math.min(myCards.length, 30);
+                const step = displayCount > 0 ? Math.max(4, 80 / displayCount) : 0;
+
+                for (let i = 0; i < displayCount; i++) {
+                    const cardEl = createCardElement(myCards[i], true);
+                    cardEl.classList.add('stack-card');
+                    cardEl.style.top = (i * step) + 'px';
+                    cardEl.style.left = '0';
+                    cardEl.style.zIndex = i;
+                    container.appendChild(cardEl);
+                }
+            }
+        }
+
+        function renderBoardCards() {
+            const container = document.getElementById('gameBoard');
+            container.innerHTML = '';
+
+            const stackContainer = document.createElement('div');
+            stackContainer.className = 'board-cards-stack';
+
+            const cardHeight = 84;
+            const overlap = cardHeight / 2;
+            const displayCount = Math.min(boardCards.length, 20);
+            const startIndex = Math.max(0, boardCards.length - displayCount);
+
+            for (let i = 0; i < displayCount; i++) {
+                const cardIndex = startIndex + i;
+                const card = boardCards[cardIndex];
+                const cardEl = createCardElement(card, false, false);
+                cardEl.classList.add('board-card');
+                cardEl.style.top = (i * overlap) + 'px';
+                cardEl.style.zIndex = i;
+                
+                if (cardIndex === boardCards.length - 1) {
+                    cardEl.style.boxShadow = '0 0 15px rgba(255, 215, 0, 0.6)';
+                }
+                
+                stackContainer.appendChild(cardEl);
+            }
+
+            const totalHeight = displayCount > 0 ? (displayCount - 1) * overlap + cardHeight : 100;
+            stackContainer.style.minHeight = totalHeight + 'px';
+
+            container.appendChild(stackContainer);
+        }
+
+        function renderPlayers() {
+            const container = document.getElementById('playersList');
+            container.innerHTML = '';
+
+            if (isSpectator) {
+                const hint = document.createElement('div');
+                hint.className = 'spectator-hint';
+                hint.textContent = '点击玩家切换视角';
+                container.appendChild(hint);
+            }
+
+            players.forEach((player, index) => {
+                const playerEl = document.createElement('div');
+                playerEl.className = 'player-item';
+                playerEl.id = `player-${index}`;
+
+                if (index === currentTurn && !gameOver) {
+                    playerEl.classList.add('active');
+                }
+
+                if (player.eliminated) {
+                    playerEl.classList.add('eliminated');
+                }
+
+                if (isSpectator && !player.eliminated) {
+                    playerEl.classList.add('clickable');
+                    if (index === viewingPlayerIndex) {
+                        playerEl.classList.add('viewing');
+                    }
+                    playerEl.addEventListener('click', () => {
+                        viewingPlayerIndex = index;
+                        renderPlayers();
+                        renderMyCards();
+                    });
+                }
+
+                const isMe = index === myPlayerIndex;
+                const isHostPlayer = player.isHost;
+                const isViewing = isSpectator && index === viewingPlayerIndex;
+
+                playerEl.innerHTML = `
+                    <div class="player-name">
+                        ${isMe ? '我' : player.name}
+                        ${isHostPlayer ? '👑' : ''}
+                        ${isViewing ? '👁️' : ''}
+                        ${player.eliminated ? '<span class="spectator-badge">已淘汰</span>' : ''}
+                    </div>
+                    <div class="player-cards-wrapper">
+                        <span>剩余</span>
+                        <span class="card-count-highlight">${player.cardCount}</span>
+                        <span>张</span>
+                    </div>
+                `;
+
+                container.appendChild(playerEl);
+            });
+        }
+
+        function updateTurnIndicator(turnTimerValue) {
+            const indicator = document.getElementById('turnIndicator');
+            const turnText = document.getElementById('turnText');
+            const turnTimer = document.getElementById('turnTimer');
+            const playBtn = document.getElementById('playCardBtn');
+
+            if (gameOver) {
+                indicator.classList.remove('show');
+                playBtn.disabled = true;
+                return;
+            }
+
+            if (currentTurn === myPlayerIndex) {
+                turnText.textContent = '轮到你出牌！';
+                if (turnTimerValue !== undefined && turnTimerValue > 0) {
+                    turnTimer.textContent = turnTimerValue;
+                    turnTimer.classList.toggle('warning', turnTimerValue <= 2);
+                    turnTimer.style.display = 'inline-block';
+                } else {
+                    turnTimer.style.display = 'none';
+                }
+                indicator.classList.add('show');
+                playBtn.disabled = isAnimating;
+            } else {
+                indicator.classList.remove('show');
+                playBtn.disabled = true;
+            }
+        }
+
+        function showNotification(text) {
+            const existing = document.querySelector('.notification');
+            if (existing) existing.remove();
+
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = text;
+            document.body.appendChild(notification);
+
+            setTimeout(() => notification.remove(), 2500);
+        }
+
+        function addAnnouncement(text) {
+            const container = document.getElementById('announcementContent');
+            const item = document.createElement('span');
+            item.className = 'announcement-item';
+            item.innerHTML = text;
+            container.appendChild(item);
+            
+            while (container.children.length > 8) {
+                container.removeChild(container.firstChild);
+            }
+            
+            const clone = container.cloneNode(true);
+            container.innerHTML += clone.innerHTML;
+            
+            container.classList.remove('scrolling');
+            void container.offsetWidth;
+            container.classList.add('scrolling');
+        }
+
+        function getCardName(card) {
+            if (card.type === 'bigJoker') return '大王';
+            if (card.type === 'smallJoker') return '小王';
+            return `${card.suit}${card.value}`;
+        }
+
+        function celebrateWin(wonCount) {
+            const container = document.createElement('div');
+            container.className = 'celebration-container';
+            document.body.appendChild(container);
+
+            const gameBoard = document.getElementById('gameBoard');
+            const boardRect = gameBoard.getBoundingClientRect();
+            const startX = boardRect.left + boardRect.width / 2;
+            const startY = boardRect.top + boardRect.height / 2;
+
+            let emojis, particleCount, velocity, spread;
+            
+            if (wonCount >= 20) {
+                emojis = ['🎉', '🎊', '🏆', '🥇', '✨', '🌟', '💫', '🎇', '🎆', '🔥', '💎', '👑'];
+                particleCount = 50;
+                velocity = 450;
+                spread = 160;
+            } else if (wonCount >= 10) {
+                emojis = ['🎉', '🎊', '✨', '🌟', '💫', '🎈', '👏', '🥳'];
+                particleCount = 35;
+                velocity = 380;
+                spread = 140;
+            } else if (wonCount >= 5) {
+                emojis = ['✨', '🌟', '💫', '👏', '👍'];
+                particleCount = 20;
+                velocity = 300;
+                spread = 120;
+            } else {
+                emojis = ['✨', '👍', '😊'];
+                particleCount = 12;
+                velocity = 250;
+                spread = 100;
+            }
+
+            const duration = 2000;
+
+            function createParticle() {
+                const particle = document.createElement('div');
+                particle.className = 'celebration-particle';
+                particle.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+
+                const angle = (Math.random() * spread - spread / 2) * (Math.PI / 180);
+                const vel = velocity + Math.random() * velocity * 0.4;
+                const vx = Math.sin(angle) * vel;
+                const vy = -Math.cos(angle) * vel - 100;
+
+                const rotationSpeed = (Math.random() - 0.5) * 720;
+                const gravity = 500;
+                const lifeTime = 1500 + Math.random() * 1000;
+
+                particle.style.left = startX + 'px';
+                particle.style.top = startY + 'px';
+                particle.style.fontSize = (24 + Math.random() * 16) + 'px';
+
+                container.appendChild(particle);
+
+                let x = startX;
+                let y = startY;
+                let rotation = 0;
+                let particleStartTime = Date.now();
+
+                function animate() {
+                    const elapsed = (Date.now() - particleStartTime) / 1000;
+
+                    x = startX + vx * elapsed;
+                    y = startY + vy * elapsed + 0.5 * gravity * elapsed * elapsed;
+                    rotation += rotationSpeed * 0.016;
+
+                    particle.style.left = x + 'px';
+                    particle.style.top = y + 'px';
+                    particle.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+
+                    if (Date.now() - particleStartTime < lifeTime) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        particle.remove();
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            const interval = duration / particleCount;
+            let created = 0;
+
+            const createInterval = setInterval(() => {
+                createParticle();
+                created++;
+                if (created >= particleCount) {
+                    clearInterval(createInterval);
+                }
+            }, interval);
+
+            setTimeout(() => {
+                container.remove();
+            }, duration + 3000);
+        }
+
+        function animatePlayCard(card, playerIndex) {
+            return new Promise(resolve => {
+                isAnimating = true;
+                updateTurnIndicator();
+
+                const boardContainer = document.getElementById('gameBoard');
+                const boardRect = boardContainer.getBoundingClientRect();
+
+                const flyingCard = createCardElement(card, false, false);
+                flyingCard.classList.add('flying-card');
+                
+                if (playerIndex === myPlayerIndex) {
+                    const myCardsStack = document.getElementById('cardsStack');
+                    const myRect = myCardsStack.getBoundingClientRect();
+                    flyingCard.style.left = myRect.left + 'px';
+                    flyingCard.style.top = myRect.top + 'px';
+                } else {
+                    const playerEl = document.getElementById(`player-${playerIndex}`);
+                    if (playerEl) {
+                        const playerRect = playerEl.getBoundingClientRect();
+                        flyingCard.style.left = playerRect.left + 'px';
+                        flyingCard.style.top = playerRect.top + 'px';
+                    }
+                }
+                
+                document.body.appendChild(flyingCard);
+
+                requestAnimationFrame(() => {
+                    const cardWidth = 60;
+                    const cardHeight = 84;
+                    const overlap = cardHeight / 2;
+                    const displayCount = Math.min(boardCards.length, 20);
+                    
+                    const targetX = boardRect.left + (boardRect.width - cardWidth) / 2;
+                    const targetY = boardRect.top + 15 + displayCount * overlap;
+
+                    flyingCard.style.left = targetX + 'px';
+                    flyingCard.style.top = targetY + 'px';
+
+                    setTimeout(() => {
+                        flyingCard.remove();
+                        renderBoardCards();
+                        isAnimating = false;
+                        updateTurnIndicator();
+                        resolve();
+                    }, 600);
+                });
+            });
+        }
+
+        function animateWinCards(winnerIndex, wonCardCount) {
+            return new Promise(resolve => {
+                isAnimating = true;
+
+                const boardContainer = document.getElementById('gameBoard');
+                const cards = boardContainer.querySelectorAll('.board-card');
+
+                let targetX, targetY;
+                if (winnerIndex === myPlayerIndex) {
+                    const myCardsEl = document.getElementById('cardsStack');
+                    const myRect = myCardsEl.getBoundingClientRect();
+                    targetX = myRect.left + myRect.width / 2 - 20;
+                    targetY = myRect.top + 50;
+                } else {
+                    const playerEl = document.getElementById(`player-${winnerIndex}`);
+                    if (playerEl) {
+                        const playerRect = playerEl.getBoundingClientRect();
+                        targetX = playerRect.left + playerRect.width / 2 - 20;
+                        targetY = playerRect.top;
+                    }
+                }
+
+                cards.forEach((card, i) => {
+                    setTimeout(() => {
+                        const flyingCard = document.createElement('div');
+                        flyingCard.className = 'card card-mini flying-card card-front';
+                        flyingCard.innerHTML = card.innerHTML;
+                        flyingCard.classList.add('card-front');
+                        
+                        const cardRect = card.getBoundingClientRect();
+                        flyingCard.style.left = cardRect.left + 'px';
+                        flyingCard.style.top = cardRect.top + 'px';
+                        flyingCard.style.width = '40px';
+                        flyingCard.style.height = '56px';
+                        
+                        document.body.appendChild(flyingCard);
+
+                        requestAnimationFrame(() => {
+                            flyingCard.style.left = targetX + (Math.random() - 0.5) * 20 + 'px';
+                            flyingCard.style.top = targetY + 'px';
+                            flyingCard.style.transform = 'scale(0.5)';
+                            flyingCard.style.opacity = '0.5';
+
+                            setTimeout(() => flyingCard.remove(), 600);
+                        });
+                    }, i * 50);
+                });
+
+                setTimeout(() => {
+                    renderBoardCards();
+                    isAnimating = false;
+                    resolve();
+                }, cards.length * 50 + 600);
+            });
+        }
+
+        function animateDealCards(cards, playerData) {
+            return new Promise(resolve => {
+                isAnimating = true;
+                
+                const myCardsStack = document.getElementById('cardsStack');
+                const myRect = myCardsStack.getBoundingClientRect();
+                
+                const totalCards = playerData.reduce((sum, p) => sum + p.cardCount, 0);
+                let dealtCount = 0;
+                let playerIndex = 0;
+                let cardsForCurrentPlayer = 0;
+                
+                const dealInterval = setInterval(() => {
+                    if (dealtCount >= totalCards) {
+                        clearInterval(dealInterval);
+                        isAnimating = false;
+                        resolve();
+                        return;
+                    }
+                    
+                    while (cardsForCurrentPlayer >= playerData[playerIndex].cardCount) {
+                        playerIndex++;
+                        cardsForCurrentPlayer = 0;
+                    }
+                    
+                    const flyingCard = createCardElement({}, true, false);
+                    flyingCard.classList.add('flying-card');
+                    flyingCard.style.left = '50%';
+                    flyingCard.style.top = '50%';
+                    flyingCard.style.transform = 'translate(-50%, -50%)';
+                    flyingCard.style.opacity = '1';
+                    document.body.appendChild(flyingCard);
+                    
+                    let targetX, targetY;
+                    if (playerIndex === myPlayerIndex) {
+                        targetX = myRect.left;
+                        targetY = myRect.top + cardsForCurrentPlayer * 2;
+                    } else {
+                        const playerEl = document.getElementById(`player-${playerIndex}`);
+                        if (playerEl) {
+                            const playerRect = playerEl.getBoundingClientRect();
+                            targetX = playerRect.left + playerRect.width / 2 - 30;
+                            targetY = playerRect.top;
+                        }
+                    }
+                    
+                    requestAnimationFrame(() => {
+                        flyingCard.style.left = targetX + 'px';
+                        flyingCard.style.top = targetY + 'px';
+                        
+                        setTimeout(() => {
+                            flyingCard.style.opacity = '0';
+                            setTimeout(() => flyingCard.remove(), 300);
+                        }, 400);
+                    });
+                    
+                    cardsForCurrentPlayer++;
+                    dealtCount++;
+                }, 30);
+            });
+        }
+
+        function animatePayCards(payerIndex, receiverIndex, count) {
+            return new Promise(resolve => {
+                isAnimating = true;
+
+                const payerEl = document.getElementById(`player-${payerIndex}`);
+                const receiverEl = document.getElementById(`player-${receiverIndex}`);
+
+                if (!payerEl || !receiverEl) {
+                    isAnimating = false;
+                    resolve();
+                    return;
+                }
+
+                const payerRect = payerEl.getBoundingClientRect();
+                const receiverRect = receiverEl.getBoundingClientRect();
+
+                const startX = payerRect.left + payerRect.width / 2 - 20;
+                const startY = payerRect.top + payerRect.height / 2;
+                const endX = receiverRect.left + receiverRect.width / 2 - 20;
+                const endY = receiverRect.top + receiverRect.height / 2;
+
+                for (let i = 0; i < count; i++) {
+                    setTimeout(() => {
+                        const flyingCard = document.createElement('div');
+                        flyingCard.className = 'card card-mini card-back flying-card';
+                        flyingCard.innerHTML = '<div class="card-back-design" style="width:32px;height:44px;font-size:16px;">🃏</div>';
+                        flyingCard.style.left = startX + 'px';
+                        flyingCard.style.top = startY + 'px';
+                        flyingCard.style.width = '40px';
+                        flyingCard.style.height = '56px';
+                        
+                        document.body.appendChild(flyingCard);
+
+                        requestAnimationFrame(() => {
+                            flyingCard.style.left = endX + (Math.random() - 0.5) * 10 + 'px';
+                            flyingCard.style.top = endY + 'px';
+
+                            setTimeout(() => {
+                                flyingCard.style.transform = 'scale(0.3)';
+                                flyingCard.style.opacity = '0';
+                                setTimeout(() => flyingCard.remove(), 300);
+                            }, 400);
+                        });
+                    }, i * 100);
+                }
+
+                setTimeout(() => {
+                    isAnimating = false;
+                    resolve();
+                }, count * 100 + 500);
+            });
+        }
+
+        function connect() {
+            socket = io({
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                socket.emit('joinFishingRoom', { roomId, isHost, isSpectator, playerName });
+            });
+
+            socket.on('waitingForPlayers', (data) => {
+                renderWaitingRoom(data);
+            });
+
+            socket.on('gameStart', async (data) => {
+                myPlayerIndex = data.playerIndex;
+                players = data.players;
+                boardCards = data.boardCards || [];
+                currentTurn = data.currentTurn || 0;
+                gameOver = false;
+
+                document.getElementById('waitingOverlay').style.display = 'none';
+                document.getElementById('gameStatus').textContent = '发牌中...';
+
+                renderPlayers();
+
+                addAnnouncement(`🎮 游戏开始！共 <span class="highlight">${data.players.length}</span> 名玩家参与`);
+
+                await animateDealCards(data.cards || [], data.players);
+
+                myCards = data.cards || [];
+                renderMyCards();
+                renderBoardCards();
+                updateTurnIndicator();
+                
+                document.getElementById('gameTimer').style.display = 'inline';
+                document.getElementById('statusText').textContent = '游戏进行中';
+                
+                const firstPlayer = players[0]?.name || '玩家';
+                addAnnouncement(`🎯 <span class="highlight">${firstPlayer}</span> 先手出牌`);
+            });
+
+            socket.on('gameTimerUpdate', (data) => {
+                const minutes = Math.floor(data.timeLeft / 60);
+                const seconds = data.timeLeft % 60;
+                document.getElementById('gameTimerValue').textContent = 
+                    `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            });
+
+            socket.on('turnTimerUpdate', (data) => {
+                if (currentTurn === myPlayerIndex) {
+                    updateTurnIndicator(data.timeLeft);
+                }
+            });
+
+            socket.on('timeoutPenalty', (data) => {
+                addAnnouncement(`⏰ <span class="highlight">${data.playerName}</span> 超时未出牌，向其他玩家各支付1张牌！`);
+            });
+
+            socket.on('cardPlayed', async (data) => {
+                const playerName = players[data.playerIndex]?.name || '玩家';
+                const cardName = getCardName(data.card);
+                
+                if (data.card.type === 'bigJoker') {
+                    addAnnouncement(`<span class="highlight">${playerName}</span> 打出 <span class="card-name">大王</span>！其他玩家各支付5张牌！`);
+                    celebrateWin(5);
+                } else if (data.card.type === 'smallJoker') {
+                    addAnnouncement(`<span class="highlight">${playerName}</span> 打出 <span class="card-name">小王</span>！其他玩家各支付3张牌！`);
+                    celebrateWin(3);
+                } else if (data.card.value === 'K') {
+                    addAnnouncement(`<span class="highlight">${playerName}</span> 打出 <span class="card-name">${cardName}</span>！其他玩家各支付2张牌！`);
+                } else if (data.card.value === 'Q') {
+                    addAnnouncement(`<span class="highlight">${playerName}</span> 打出 <span class="card-name">${cardName}</span>！其他玩家各支付1张牌！`);
+                } else if (data.card.value === 'J') {
+                    addAnnouncement(`<span class="highlight">${playerName}</span> 打出 <span class="card-name">${cardName}</span>！清空游戏区！`);
+                }
+
+                await animatePlayCard(data.card, data.playerIndex);
+
+                if (data.playerIndex === myPlayerIndex) {
+                    myCards.shift();
+                }
+
+                boardCards = data.boardCards;
+                currentTurn = data.currentTurn;
+                players = data.players;
+
+                renderMyCards();
+                renderBoardCards();
+                renderPlayers();
+                updateTurnIndicator();
+
+                const statusText = currentTurn === myPlayerIndex ? '轮到你出牌' : `等待 ${players[currentTurn]?.name} 出牌`;
+                document.getElementById('gameStatus').textContent = statusText;
+            });
+
+            socket.on('cardsWon', async (data) => {
+                const winnerName = players[data.winnerIndex]?.name || '玩家';
+                const cardName = data.playedCard ? getCardName(data.playedCard) : '';
+                
+                if (cardName) {
+                    addAnnouncement(`<span class="highlight">${winnerName}</span> 打出 <span class="card-name">${cardName}</span> 获得 <span class="highlight">${data.wonCount}</span> 张牌！`);
+                }
+                
+                showNotification(`${winnerName} 获得了 ${data.wonCount} 张牌！`);
+                celebrateWin(data.wonCount);
+
+                if (data.playedCard) {
+                    boardCards.push(data.playedCard);
+                    await animatePlayCard(data.playedCard, data.winnerIndex);
+                }
+
+                await animateWinCards(data.winnerIndex, data.wonCount);
+
+                if (data.winnerIndex === myPlayerIndex) {
+                    myCards = data.cards;
+                }
+
+                boardCards = data.boardCards;
+                players = data.players;
+
+                if (data.canContinue) {
+                    currentTurn = data.winnerIndex;
+                }
+
+                renderMyCards();
+                renderBoardCards();
+                renderPlayers();
+                updateTurnIndicator();
+                
+                if (data.canContinue && currentTurn === myPlayerIndex) {
+                    showNotification('你可以继续出牌！');
+                }
+            });
+
+            socket.on('playerEliminated', (data) => {
+                players = data.players;
+                const eliminatedName = data.players[data.playerIndex]?.name || '玩家';
+                
+                addAnnouncement(`😢 <span class="highlight">${eliminatedName}</span> 牌已用完，被淘汰！`);
+
+                if (isSpectator && data.playerIndex === viewingPlayerIndex) {
+                    viewingPlayerIndex = data.players.findIndex(p => !p.eliminated && p.cardCount > 0);
+                    renderMyCards();
+                }
+
+                if (data.playerIndex === myPlayerIndex) {
+                    isSpectator = true;
+                    viewingPlayerIndex = data.players.findIndex(p => !p.eliminated && p.cardCount > 0);
+                    document.getElementById('nextCardPreview').querySelector('.next-card-label').textContent = '当前视角';
+                    document.getElementById('playCardBtn').style.display = 'none';
+                    renderMyCards();
+                }
+
+                renderPlayers();
+
+                if (data.playerIndex === myPlayerIndex) {
+                    showNotification('你的牌已用完，进入观战模式');
+                } else {
+                    showNotification(`${eliminatedName} 已淘汰`);
+                }
+            });
+
+            socket.on('payCards', async (data) => {
+                const payerName = players[data.payerIndex]?.name || '玩家';
+                const receiverName = players[data.receiverIndex]?.name || '玩家';
+                
+                addAnnouncement(`<span class="highlight">${payerName}</span> 向 <span class="highlight">${receiverName}</span> 支付了 <span class="card-name">${data.payCount}</span> 张牌`);
+                showNotification(`${payerName} 向 ${receiverName} 支付了 ${data.payCount} 张牌`);
+
+                await animatePayCards(data.payerIndex, data.receiverIndex, data.payCount);
+
+                if (data.payerIndex === myPlayerIndex) {
+                    myCards = data.payerCards;
+                }
+                if (data.receiverIndex === myPlayerIndex) {
+                    myCards = data.receiverCards;
+                }
+                players = data.players;
+
+                renderMyCards();
+                renderPlayers();
+            });
+
+            socket.on('gameOver', (data) => {
+                gameOver = true;
+                players = data.players;
+
+                const winnerName = data.rankings[0]?.name || '玩家';
+                addAnnouncement(`🏆 游戏结束！<span class="highlight">${winnerName}</span> 获得冠军！`);
+                celebrateWin(20);
+
+                const resultIcon = document.getElementById('resultIcon');
+                const resultTitle = document.getElementById('resultTitle');
+                const resultRank = document.getElementById('resultRank');
+
+                const myRank = data.rankings.findIndex(r => r.playerIndex === myPlayerIndex) + 1;
+
+                if (data.winnerIndex === myPlayerIndex) {
+                    resultIcon.textContent = '🏆';
+                    resultTitle.textContent = '恭喜你获胜！';
+                    resultTitle.className = 'result-title win';
+                } else {
+                    resultIcon.textContent = myRank === 2 ? '🥈' : myRank === 3 ? '🥉' : '😢';
+                    resultTitle.textContent = `游戏结束，你排名第 ${myRank} 名`;
+                    resultTitle.className = 'result-title lose';
+                }
+
+                const rankingText = data.rankings.map((r, i) => {
+                    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+                    return `${medal} 第${i + 1}名: ${r.name}`;
+                }).join('\n');
+
+                resultRank.innerHTML = rankingText.replace(/\n/g, '<br>');
+
+                document.getElementById('resultModal').classList.add('show');
+                document.getElementById('turnIndicator').classList.remove('show');
+                document.getElementById('playCardBtn').disabled = true;
+            });
+
+            socket.on('spectateStart', (data) => {
+                myPlayerIndex = -1;
+                boardCards = data.boardCards || [];
+                players = data.players;
+                currentTurn = data.currentTurn || 0;
+                gameOver = false;
+
+                viewingPlayerIndex = data.players.findIndex(p => !p.eliminated && p.cardCount > 0);
+
+                document.getElementById('waitingOverlay').style.display = 'none';
+                document.getElementById('gameStatus').textContent = '观战模式';
+                document.getElementById('playCardBtn').style.display = 'none';
+                document.getElementById('nextCardPreview').querySelector('.next-card-label').textContent = '当前视角';
+
+                renderBoardCards();
+                renderPlayers();
+                renderMyCards();
+            });
+
+            socket.on('error', (data) => {
+                alert(data.message);
+                setTimeout(() => window.close(), 1000);
+            });
+        }
+
+        function renderWaitingRoom(data) {
+            const waitingList = document.getElementById('waitingList');
+            const startBtn = document.getElementById('startGameBtn');
+
+            waitingList.innerHTML = '';
+            data.players.forEach(player => {
+                const playerEl = document.createElement('div');
+                playerEl.className = 'waiting-player';
+                if (player.isHost) {
+                    playerEl.classList.add('host');
+                }
+                playerEl.innerHTML = `${player.isHost ? '👑 ' : ''}${player.name}`;
+                waitingList.appendChild(playerEl);
+            });
+
+            document.querySelector('.waiting-players').textContent = 
+                `当前 ${data.players.length}/4 人，需要至少 2 人`;
+
+            if (isHost && data.players.length >= 2) {
+                startBtn.style.display = 'inline-block';
+            } else {
+                startBtn.style.display = 'none';
+            }
+        }
+
+        function showNotification(text) {
+            const status = document.getElementById('gameStatus');
+            const originalText = status.textContent;
+            status.textContent = text;
+            status.style.color = '#ffd700';
+
+            setTimeout(() => {
+                status.style.color = '#fff';
+            }, 2000);
+        }
+
+        document.getElementById('playCardBtn').addEventListener('click', () => {
+            if (!gameOver && currentTurn === myPlayerIndex && myCards.length > 0) {
+                socket.emit('playCard', { roomId });
+            }
+        });
+
+        document.getElementById('startGameBtn').addEventListener('click', () => {
+            socket.emit('startFishingGame', { roomId });
+        });
+
+        document.getElementById('exitBtn').addEventListener('click', () => {
+            socket.emit('leaveFishingRoom', { roomId });
+            setTimeout(() => window.close(), 100);
+        });
+
+        document.getElementById('resultBtn').addEventListener('click', () => {
+            socket.emit('leaveFishingRoom', { roomId });
+            setTimeout(() => window.close(), 100);
+        });
+
+        document.getElementById('rulesBtn').addEventListener('click', () => {
+            document.getElementById('rulesModal').classList.add('show');
+        });
+
+        document.getElementById('closeRulesBtn').addEventListener('click', () => {
+            document.getElementById('rulesModal').classList.remove('show');
+        });
+
+        document.getElementById('rulesModal').addEventListener('click', (e) => {
+            if (e.target.id === 'rulesModal') {
+                document.getElementById('rulesModal').classList.remove('show');
+            }
+        });
+
+        connect();
+    </script>
+</body>
+</html>

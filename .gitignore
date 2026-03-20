@@ -1,0 +1,10 @@
+# 忽略 Node.js 依赖目录
+node_modules/
+
+# 忽略可能产生的空文件或系统文件
+nul
+.DS_Store
+*.log
+
+# 忽略环境变量文件（如果有）
+.env

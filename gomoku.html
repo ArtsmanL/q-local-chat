@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>五子棋对战</title>
+    <style>
+        :root {
+            --bg-gradient-1: #1a1a2e;
+            --bg-gradient-2: #16213e;
+            --text-primary: #fff;
+            --board-color: #dcb35c;
+            --line-color: #8b7355;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--bg-gradient-1) 0%, var(--bg-gradient-2) 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .game-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .game-header h1 {
+            color: var(--text-primary);
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .game-status {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .game-status.waiting {
+            background: rgba(234, 179, 8, 0.3);
+        }
+
+        .game-status.your-turn {
+            background: rgba(34, 197, 94, 0.3);
+        }
+
+        .game-status.opponent-turn {
+            background: rgba(59, 130, 246, 0.3);
+        }
+
+        .players-info {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 20px;
+        }
+
+        .player-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .player-info.active {
+            background: rgba(34, 197, 94, 0.3);
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+            transform: scale(1.05);
+        }
+
+        .player-stone {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+        }
+
+        .player-stone.black {
+            background: radial-gradient(circle at 30% 30%, #555, #000);
+        }
+
+        .player-stone.white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+            border: 1px solid #999;
+        }
+
+        .player-name {
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .board-container {
+            position: relative;
+            background: var(--board-color);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .board-canvas {
+            position: relative;
+        }
+
+        .board-lines {
+            display: block;
+        }
+
+        .board {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .cell {
+            position: absolute;
+            cursor: pointer;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .cell:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .stone {
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+            pointer-events: none;
+            animation: placeStone 0.2s ease;
+        }
+
+        @keyframes placeStone {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.1); }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
+        .stone.black {
+            background: radial-gradient(circle at 30% 30%, #555, #000);
+            box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .stone.white {
+            background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+            box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .stone.last-move {
+            box-shadow: 0 0 0 3px #eab308, 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .stone.win-stone {
+            animation: winPulse 0.5s ease infinite alternate;
+        }
+
+        @keyframes winPulse {
+            from { box-shadow: 0 0 0 3px #eab308, 0 0 10px #eab308; }
+            to { box-shadow: 0 0 0 5px #eab308, 0 0 20px #eab308; }
+        }
+
+        .star-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: var(--line-color);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+        }
+
+        .game-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .game-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .game-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .game-btn.secondary {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .game-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .result-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .result-modal.show {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .result-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: scaleIn 0.3s ease;
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .result-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .result-title.win {
+            color: #4ade80;
+        }
+
+        .result-title.lose {
+            color: #f87171;
+        }
+
+        .result-desc {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+
+        .result-btn {
+            padding: 14px 40px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .result-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .celebration-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .celebration-particle {
+            position: absolute;
+            font-size: 24px;
+            pointer-events: none;
+            animation: particleFall linear forwards;
+        }
+
+        @keyframes particleFall {
+            0% {
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-header">
+        <h1>五子棋对战</h1>
+        <div class="game-status" id="gameStatus">连接中...</div>
+    </div>
+
+    <div class="players-info">
+        <div class="player-info" id="playerBlack">
+            <div class="player-stone black"></div>
+            <span class="player-name">黑方</span>
+        </div>
+        <div class="player-info" id="playerWhite">
+            <div class="player-stone white"></div>
+            <span class="player-name">白方</span>
+        </div>
+    </div>
+
+    <div class="board-container">
+        <div class="board-canvas" id="boardCanvas">
+            <canvas class="board-lines" id="boardLines"></canvas>
+            <div class="board" id="board"></div>
+        </div>
+    </div>
+
+    <div class="game-actions">
+        <button class="game-btn secondary" id="closeBtn">认输退出</button>
+    </div>
+
+    <div class="result-modal" id="resultModal">
+        <div class="result-content">
+            <div class="result-icon" id="resultIcon"></div>
+            <div class="result-title" id="resultTitle"></div>
+            <div class="result-desc" id="resultDesc"></div>
+            <button class="result-btn" id="resultBtn">确认退出</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const boardCanvas = document.getElementById('boardCanvas');
+        const boardLines = document.getElementById('boardLines');
+        const board = document.getElementById('board');
+        const gameStatus = document.getElementById('gameStatus');
+        const playerBlack = document.getElementById('playerBlack');
+        const playerWhite = document.getElementById('playerWhite');
+        const closeBtn = document.getElementById('closeBtn');
+        const resultModal = document.getElementById('resultModal');
+        const resultIcon = document.getElementById('resultIcon');
+        const resultTitle = document.getElementById('resultTitle');
+        const resultDesc = document.getElementById('resultDesc');
+        const resultBtn = document.getElementById('resultBtn');
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room');
+        const isCreator = urlParams.get('creator') === 'true';
+        const isSpectator = urlParams.get('spectator') === 'true';
+
+        let socket = null;
+        let myColor = null;
+        let opponentName = '对手';
+        let currentTurn = 'black';
+        let gameBoard = [];
+        let gameOver = false;
+        let lastMove = null;
+        let winStones = [];
+        let audioContext = null;
+        let spectatorData = null;
+
+        const GRID_SIZE = 15;
+        const CELL_SIZE = 30;
+        const PADDING = 15;
+        const BOARD_SIZE = (GRID_SIZE - 1) * CELL_SIZE + PADDING * 2;
+
+        const starPoints = [
+            [3, 3], [3, 7], [3, 11],
+            [7, 3], [7, 7], [7, 11],
+            [11, 3], [11, 7], [11, 11]
+        ];
+
+        function initBoard() {
+            boardCanvas.style.width = BOARD_SIZE + 'px';
+            boardCanvas.style.height = BOARD_SIZE + 'px';
+            boardLines.width = BOARD_SIZE;
+            boardLines.height = BOARD_SIZE;
+            board.style.width = BOARD_SIZE + 'px';
+            board.style.height = BOARD_SIZE + 'px';
+
+            board.innerHTML = '';
+            gameBoard = [];
+            winStones = [];
+
+            const ctx = boardLines.getContext('2d');
+            ctx.fillStyle = '#dcb35c';
+            ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
+
+            ctx.strokeStyle = '#8b7355';
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i < GRID_SIZE; i++) {
+                const pos = PADDING + i * CELL_SIZE;
+                ctx.beginPath();
+                ctx.moveTo(PADDING, pos);
+                ctx.lineTo(BOARD_SIZE - PADDING, pos);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(pos, PADDING);
+                ctx.lineTo(pos, BOARD_SIZE - PADDING);
+                ctx.stroke();
+            }
+
+            ctx.fillStyle = '#8b7355';
+            starPoints.forEach(([row, col]) => {
+                const x = PADDING + col * CELL_SIZE;
+                const y = PADDING + row * CELL_SIZE;
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            for (let row = 0; row < GRID_SIZE; row++) {
+                gameBoard[row] = [];
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    gameBoard[row][col] = null;
+
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.style.left = (PADDING + col * CELL_SIZE) + 'px';
+                    cell.style.top = (PADDING + row * CELL_SIZE) + 'px';
+                    cell.style.width = CELL_SIZE + 'px';
+                    cell.style.height = CELL_SIZE + 'px';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    cell.addEventListener('click', () => handleCellClick(row, col));
+                    board.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(row, col) {
+            if (isSpectator || gameOver || currentTurn !== myColor || gameBoard[row][col]) return;
+
+            placeStone(row, col, myColor, true);
+            socket.emit('gomokuMove', { roomId, row, col, color: myColor });
+        }
+
+        function placeStone(row, col, color, shouldSwitchTurn) {
+            if (gameBoard[row][col]) return;
+            
+            gameBoard[row][col] = color;
+
+            const stone = document.createElement('div');
+            stone.className = 'stone ' + color;
+            stone.style.left = (PADDING + col * CELL_SIZE) + 'px';
+            stone.style.top = (PADDING + row * CELL_SIZE) + 'px';
+            stone.style.width = (CELL_SIZE - 4) + 'px';
+            stone.style.height = (CELL_SIZE - 4) + 'px';
+            stone.dataset.row = row;
+            stone.dataset.col = col;
+            board.appendChild(stone);
+
+            if (lastMove) {
+                const lastStone = board.querySelector(`.stone[data-row="${lastMove.row}"][data-col="${lastMove.col}"]`);
+                if (lastStone) lastStone.classList.remove('last-move');
+            }
+
+            stone.classList.add('last-move');
+            lastMove = { row, col };
+
+            playStoneSound();
+
+            if (shouldSwitchTurn) {
+                currentTurn = currentTurn === 'black' ? 'white' : 'black';
+                if (isSpectator) {
+                    updateSpectatorTurnDisplay();
+                } else {
+                    updateTurnDisplay();
+                }
+            }
+
+            const result = checkWin(row, col, color);
+            if (result) {
+                gameOver = true;
+                showWin(color, result);
+            }
+        }
+
+        function playStoneSound() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            
+            const now = audioContext.currentTime;
+            
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, now);
+            oscillator.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+            
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+            
+            oscillator.start(now);
+            oscillator.stop(now + 0.1);
+        }
+
+        function checkWin(row, col, color) {
+            const directions = [
+                [[0, 1], [0, -1]],
+                [[1, 0], [-1, 0]],
+                [[1, 1], [-1, -1]],
+                [[1, -1], [-1, 1]]
+            ];
+
+            for (const [dir1, dir2] of directions) {
+                let count = 1;
+                const stones = [[row, col]];
+
+                for (const [dr, dc] of [dir1, dir2]) {
+                    let r = row + dr;
+                    let c = col + dc;
+                    while (r >= 0 && r < GRID_SIZE && c >= 0 && c < GRID_SIZE && gameBoard[r][c] === color) {
+                        count++;
+                        stones.push([r, c]);
+                        r += dr;
+                        c += dc;
+                    }
+                }
+
+                if (count >= 5) {
+                    return stones;
+                }
+            }
+            return null;
+        }
+
+        function showWin(winner, stones) {
+            winStones = stones;
+            stones.forEach(([r, c]) => {
+                const stone = board.querySelector(`.stone[data-row="${r}"][data-col="${c}"]`);
+                if (stone) {
+                    stone.classList.remove('last-move');
+                    stone.classList.add('win-stone');
+                }
+            });
+
+            const isMeWinner = winner === myColor;
+
+            if (isMeWinner) {
+                resultIcon.textContent = '🏆';
+                resultTitle.textContent = '恭喜你赢了！';
+                resultTitle.className = 'result-title win';
+                resultDesc.textContent = `你战胜了 ${opponentName}`;
+                celebrateWin();
+            } else {
+                resultIcon.textContent = '😢';
+                resultTitle.textContent = '很遗憾，你输了';
+                resultTitle.className = 'result-title lose';
+                resultDesc.textContent = `${opponentName} 获得了胜利`;
+            }
+
+            setTimeout(() => {
+                resultModal.classList.add('show');
+            }, 1500);
+
+            socket.emit('gameOver', {
+                roomId,
+                winner: winner,
+                winnerName: isMeWinner ? (isCreator ? 'black' : 'white') : opponentName
+            });
+        }
+
+        function celebrateWin() {
+            const container = document.createElement('div');
+            container.className = 'celebration-container';
+            document.body.appendChild(container);
+
+            const emojis = ['🎉', '🎊', '🏆', '🥇', '✨', '🌟', '💫', '🎇', '🎆', '🎈', '🙌', '👏', '🥳', '😄', '🤩'];
+            const particleCount = 50;
+            const duration = 3000;
+            const startTime = Date.now();
+
+            function createParticle() {
+                const particle = document.createElement('div');
+                particle.className = 'celebration-particle';
+                particle.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+
+                const startX = window.innerWidth / 2;
+                const startY = window.innerHeight + 50;
+
+                const angle = (Math.random() * 120 - 60) * (Math.PI / 180);
+                const velocity = 300 + Math.random() * 400;
+                const vx = Math.sin(angle) * velocity;
+                const vy = -Math.cos(angle) * velocity;
+
+                const rotationSpeed = (Math.random() - 0.5) * 720;
+                const gravity = 600;
+                const lifeTime = 2000 + Math.random() * 1500;
+
+                particle.style.left = startX + 'px';
+                particle.style.top = startY + 'px';
+                particle.style.fontSize = (20 + Math.random() * 20) + 'px';
+                particle.style.animationDuration = lifeTime + 'ms';
+
+                container.appendChild(particle);
+
+                let x = startX;
+                let y = startY;
+                let rotation = 0;
+                let particleStartTime = Date.now();
+
+                function animate() {
+                    const elapsed = (Date.now() - particleStartTime) / 1000;
+
+                    x = startX + vx * elapsed;
+                    y = startY + vy * elapsed + 0.5 * gravity * elapsed * elapsed;
+                    rotation += rotationSpeed * 0.016;
+
+                    particle.style.left = x + 'px';
+                    particle.style.top = y + 'px';
+                    particle.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+
+                    if (Date.now() - particleStartTime < lifeTime) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        particle.remove();
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            const interval = duration / particleCount;
+            let created = 0;
+
+            const createInterval = setInterval(() => {
+                createParticle();
+                created++;
+                if (created >= particleCount) {
+                    clearInterval(createInterval);
+                }
+            }, interval);
+
+            setTimeout(() => {
+                container.remove();
+            }, duration + 4000);
+        }
+
+        function updateTurnDisplay() {
+            playerBlack.classList.toggle('active', currentTurn === 'black');
+            playerWhite.classList.toggle('active', currentTurn === 'white');
+
+            if (gameOver) return;
+
+            if (currentTurn === myColor) {
+                gameStatus.textContent = '轮到你了';
+                gameStatus.className = 'game-status your-turn';
+            } else {
+                gameStatus.textContent = '对手思考中...';
+                gameStatus.className = 'game-status opponent-turn';
+            }
+        }
+
+        function updateSpectatorTurnDisplay() {
+            playerBlack.classList.toggle('active', currentTurn === 'black');
+            playerWhite.classList.toggle('active', currentTurn === 'white');
+
+            if (gameOver) return;
+
+            const turnText = currentTurn === 'black' ? '黑方' : '白方';
+            gameStatus.textContent = `${turnText}思考中...`;
+            gameStatus.className = 'game-status opponent-turn';
+        }
+
+        function endGame(reason) {
+            gameOver = true;
+
+            if (reason === 'surrender') {
+                resultIcon.textContent = '🏳️';
+                resultTitle.textContent = '你认输了';
+                resultTitle.className = 'result-title lose';
+                resultDesc.textContent = '胜败乃兵家常事';
+                resultModal.classList.add('show');
+
+                socket.emit('gameOver', {
+                    roomId,
+                    winner: myColor === 'black' ? 'white' : 'black',
+                    winnerName: opponentName,
+                    reason: 'surrender'
+                });
+            }
+        }
+
+        function closeGame() {
+            socket.emit('leaveGameRoom', { roomId });
+            setTimeout(() => window.close(), 100);
+        }
+
+        function connect() {
+            socket = io({
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                if (isSpectator) {
+                    socket.emit('spectateGame', { roomId });
+                } else {
+                    socket.emit('joinGameRoom', { roomId, isCreator });
+                }
+            });
+
+            socket.on('spectateStart', (data) => {
+                spectatorData = data;
+                const aliases = getUserAliases();
+                const player1Display = aliases[data.player1Ip] || data.player1 || '黑方';
+                const player2Display = aliases[data.player2Ip] || data.player2 || '白方';
+
+                initBoard();
+                gameOver = false;
+                currentTurn = data.currentTurn;
+                lastMove = null;
+
+                document.querySelector('#playerBlack .player-name').textContent = player1Display + '（黑方）';
+                document.querySelector('#playerWhite .player-name').textContent = player2Display + '（白方）';
+
+                data.moves.forEach(move => {
+                    gameBoard[move.row][move.col] = move.color;
+                    const stone = document.createElement('div');
+                    stone.className = 'stone ' + move.color;
+                    stone.style.left = (PADDING + move.col * CELL_SIZE) + 'px';
+                    stone.style.top = (PADDING + move.row * CELL_SIZE) + 'px';
+                    stone.style.width = (CELL_SIZE - 4) + 'px';
+                    stone.style.height = (CELL_SIZE - 4) + 'px';
+                    stone.dataset.row = move.row;
+                    stone.dataset.col = move.col;
+                    board.appendChild(stone);
+                    lastMove = { row: move.row, col: move.col };
+                });
+
+                if (lastMove) {
+                    const lastStone = board.querySelector(`.stone[data-row="${lastMove.row}"][data-col="${lastMove.col}"]`);
+                    if (lastStone) lastStone.classList.add('last-move');
+                }
+
+                gameStatus.textContent = '观战模式';
+                gameStatus.className = 'game-status waiting';
+                closeBtn.textContent = '退出观战';
+                updateSpectatorTurnDisplay();
+            });
+
+            socket.on('spectateError', (data) => {
+                gameStatus.textContent = data.message;
+                gameStatus.className = 'game-status';
+                setTimeout(() => window.close(), 2000);
+            });
+
+            socket.on('gameStart', (data) => {
+                myColor = isCreator ? 'black' : 'white';
+                
+                const aliases = getUserAliases();
+                
+                const creatorDisplay = aliases[data.creatorIp] || data.creatorName || '黑方';
+                const joinerDisplay = aliases[data.joinerIp] || data.joinerName || '白方';
+
+                initBoard();
+                gameOver = false;
+                currentTurn = 'black';
+                lastMove = null;
+
+                if (isCreator) {
+                    document.querySelector('#playerBlack .player-name').textContent = '我（黑方）';
+                    document.querySelector('#playerWhite .player-name').textContent = joinerDisplay + '（白方）';
+                    opponentName = joinerDisplay;
+                } else {
+                    document.querySelector('#playerBlack .player-name').textContent = creatorDisplay + '（黑方）';
+                    document.querySelector('#playerWhite .player-name').textContent = '我（白方）';
+                    opponentName = creatorDisplay;
+                }
+
+                gameStatus.textContent = '游戏开始！黑棋先行';
+                updateTurnDisplay();
+            });
+
+            function getUserAliases() {
+                try {
+                    return JSON.parse(localStorage.getItem('userAliases') || '{}');
+                } catch (e) {
+                    return {};
+                }
+            }
+
+            socket.on('gomokuMove', (data) => {
+                if (isSpectator) {
+                    placeStone(data.row, data.col, data.color, true);
+                } else if (data.color !== myColor) {
+                    placeStone(data.row, data.col, data.color, true);
+                }
+            });
+
+            socket.on('spectatorGameOver', (data) => {
+                gameOver = true;
+                const winnerText = data.winnerColor === 'black' ? '黑方' : '白方';
+                
+                resultIcon.textContent = '🏆';
+                resultTitle.textContent = `${data.winnerName} 获胜！`;
+                resultTitle.className = 'result-title win';
+                resultDesc.textContent = `恭喜 ${winnerText} ${data.winnerName}`;
+                resultModal.classList.add('show');
+
+                celebrateWin();
+            });
+
+            socket.on('opponentGameOver', (data) => {
+                gameOver = true;
+
+                if (data.reason === 'surrender') {
+                    resultIcon.textContent = '🎉';
+                    resultTitle.textContent = '对手认输，你赢了！';
+                    resultTitle.className = 'result-title win';
+                    resultDesc.textContent = '对手选择了投降';
+                    resultModal.classList.add('show');
+                }
+            });
+
+            socket.on('opponentDisconnected', () => {
+                if (!gameOver && !isSpectator) {
+                    gameOver = true;
+                    resultIcon.textContent = '🎉';
+                    resultTitle.textContent = '对手断线，你赢了！';
+                    resultTitle.className = 'result-title win';
+                    resultDesc.textContent = '对手已断开连接';
+                    resultModal.classList.add('show');
+
+                    socket.emit('gameOver', {
+                        roomId,
+                        winner: myColor,
+                        winnerName: '你',
+                        reason: 'disconnect'
+                    });
+                }
+            });
+
+            socket.on('waitingForOpponent', () => {
+                gameStatus.textContent = '等待对手加入...';
+                gameStatus.className = 'game-status waiting';
+            });
+        }
+
+        closeBtn.addEventListener('click', () => {
+            if (isSpectator) {
+                closeGame();
+            } else if (!gameOver) {
+                if (confirm('确定要认输吗？')) {
+                    endGame('surrender');
+                }
+            } else {
+                closeGame();
+            }
+        });
+
+        resultBtn.addEventListener('click', closeGame);
+
+        connect();
+    </script>
+</body>
+</html>

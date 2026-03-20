@@ -1,0 +1,2672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大富翁</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            overflow: hidden;
+        }
+
+        .game-container {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .players-panel {
+            width: 220px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .player-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 15px;
+            padding: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s;
+        }
+
+        .player-card.active {
+            border-color: #ffd700;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+            animation: cardPulse 1.5s infinite;
+        }
+
+        @keyframes cardPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); }
+        }
+
+        .turn-badge {
+            display: block;
+            text-align: center;
+            font-size: 12px;
+            color: #ffd700;
+            background: rgba(255, 215, 0, 0.2);
+            padding: 4px 8px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .player-piece {
+            font-size: 32px;
+            text-align: center;
+            margin-bottom: 10px;
+            width: 50px;
+            height: 50px;
+            line-height: 46px;
+            border-radius: 50%;
+            border: 3px solid;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0 auto 10px;
+        }
+
+        .player-piece.turn {
+            animation: piecePulse 1s infinite;
+        }
+
+        @keyframes piecePulse {
+            0%, 100% { box-shadow: 0 0 10px currentColor; }
+            50% { box-shadow: 0 0 25px currentColor, 0 0 40px currentColor; }
+        }
+
+        .player-name {
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .player-money {
+            color: #ffd700;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .player-money::before { content: '$'; margin-right: 2px; }
+
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .game-header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+
+        .game-title {
+            color: #ffd700;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
+        .game-status {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+            margin-top: 8px;
+        }
+
+        .board-container {
+            position: relative;
+            width: 700px;
+            height: 700px;
+        }
+
+        .board {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .cell {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+        }
+
+        .cell:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.05);
+        }
+
+        .cell-name {
+            color: #fff;
+            font-size: 9px;
+            text-align: center;
+            padding: 1px 2px;
+            word-break: break-all;
+            line-height: 1.1;
+        }
+
+        .cell-price {
+            color: #ffd700;
+            font-size: 8px;
+            margin-top: 1px;
+        }
+
+        .cell.start { 
+            background: linear-gradient(135deg, #00b894 0%, #00cec9 100%);
+            border-color: #00b894;
+        }
+        .cell.jail { 
+            background: linear-gradient(135deg, #636e72 0%, #2d3436 100%);
+            border-color: #636e72;
+        }
+        .cell.parking { 
+            background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+            border-color: #0984e3;
+        }
+        .cell.jail { 
+            background: linear-gradient(135deg, #d63031 0%, #ff7675 100%);
+            border-color: #d63031;
+        }
+        .cell.chance { 
+            background: linear-gradient(135deg, #fd79a8 0%, #e84393 100%);
+            border-color: #fd79a8;
+        }
+        .cell.tax { 
+            background: linear-gradient(135deg, #fdcb6e 0%, #f39c12 100%);
+            border-color: #fdcb6e;
+        }
+
+        .center-area {
+            position: absolute;
+            top: 80px;
+            left: 80px;
+            width: 540px;
+            height: 540px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .center-logo {
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.5);
+        }
+
+        .dice-container {
+            display: flex;
+            gap: 20px;
+        }
+
+        .dice {
+            width: 60px;
+            height: 60px;
+            background: #fff;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.1s;
+        }
+
+        .dice.rolling { animation: shake 0.5s infinite; }
+
+        @keyframes shake {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+        }
+
+        .current-turn-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0.1) 100%);
+            border: 2px solid rgba(255, 215, 0, 0.5);
+            border-radius: 25px;
+            margin-bottom: 15px;
+            animation: indicatorPulse 1.5s infinite;
+        }
+
+        @keyframes indicatorPulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+            50% { box-shadow: 0 0 25px rgba(255, 215, 0, 0.6); }
+        }
+
+        .turn-piece {
+            font-size: 28px;
+            animation: pieceBounce 0.5s infinite;
+        }
+
+        @keyframes pieceBounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+
+        .turn-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .roll-btn {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
+        }
+
+        .roll-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(243, 156, 18, 0.6); }
+        .roll-btn:disabled { background: #555; cursor: not-allowed; box-shadow: none; }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .overlay-title {
+            color: #ffd700;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        .overlay-subtitle {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+
+        .waiting-players {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .waiting-player {
+            color: #fff;
+            font-size: 16px;
+            padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .waiting-player .name { flex: 1; }
+
+        .waiting-player .host-badge {
+            background: #ffd700;
+            color: #000;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .start-btn {
+            padding: 15px 50px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .start-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(46, 204, 113, 0.6); }
+        .start-btn:disabled { background: #555; cursor: not-allowed; box-shadow: none; }
+
+        .pieces-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 12px;
+            max-width: 600px;
+        }
+
+        .piece-option {
+            width: 65px;
+            height: 65px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .piece-option .color-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 6px;
+            border-radius: 0 0 12px 12px;
+        }
+
+        .piece-option:hover { transform: scale(1.1); }
+        .piece-option.selected { border-color: #ffd700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+        .piece-option.disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .confirm-btn {
+            margin-top: 30px;
+            padding: 15px 50px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .confirm-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(46, 204, 113, 0.6); }
+        .confirm-btn:disabled { background: #555; cursor: not-allowed; }
+
+        .player-marker {
+            position: absolute;
+            font-size: 24px;
+            z-index: 10;
+            transition: left 0.15s ease-out, top 0.15s ease-out;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            border: 2px solid;
+        }
+
+        .player-marker.jumping {
+            animation: jump 0.2s ease;
+        }
+
+        @keyframes jump {
+            0% { transform: translateY(0) scale(1); }
+            40% { transform: translateY(-20px) scale(1.2); }
+            100% { transform: translateY(0) scale(1); }
+        }
+
+        .countdown-display {
+            font-size: 120px;
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 0 50px rgba(255, 215, 0, 0.8);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .info-panel {
+            width: 220px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-title {
+            color: #ffd700;
+            font-size: 18px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .info-item {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+
+        .broadcast-panel {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 20px;
+            padding: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .broadcast-title {
+            color: #ffd700;
+            font-size: 18px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .broadcast-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .broadcast-item {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 13px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            animation: slideIn 0.3s ease;
+            line-height: 1.4;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .broadcast-item.buy { border-left: 3px solid #2ecc71; }
+        .broadcast-item.rent { border-left: 3px solid #e74c3c; }
+        .broadcast-item.build { border-left: 3px solid #3498db; }
+        .broadcast-item.tax { border-left: 3px solid #f39c12; }
+        .broadcast-item.chance { border-left: 3px solid #9b59b6; }
+        .broadcast-item.start { border-left: 3px solid #1abc9c; }
+        .broadcast-item.jail { border-left: 3px solid #636e72; }
+
+        .exit-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background: rgba(231, 76, 60, 0.8);
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 10;
+        }
+
+        .exit-btn:hover { background: rgba(231, 76, 60, 1); }
+
+        .land-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        .land-modal.show { display: flex; }
+
+        .land-modal-content {
+            background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-radius: 24px;
+            padding: 0;
+            min-width: 500px;
+            max-width: 600px;
+            border: none;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            animation: modalPop 0.3s ease;
+        }
+
+        @keyframes modalPop {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .sell-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 250;
+        }
+
+        .sell-modal.show { display: flex; }
+
+        .sell-modal-content {
+            background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-radius: 24px;
+            padding: 0;
+            min-width: 550px;
+            max-width: 650px;
+            border: none;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            animation: modalPop 0.3s ease;
+        }
+
+        .sell-modal-header {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.2) 0%, rgba(231, 76, 60, 0.1) 100%);
+            padding: 25px 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .sell-modal-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .sell-modal-header h2 {
+            color: #e74c3c;
+            font-size: 24px;
+            margin: 0;
+        }
+
+        .sell-modal-body {
+            padding: 25px 30px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .sell-info {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 16px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(231, 76, 60, 0.1);
+            border-radius: 12px;
+            text-align: center;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+
+        .sell-info strong {
+            color: #e74c3c;
+            font-size: 22px;
+        }
+
+        .sell-assets {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sell-asset-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.2s;
+        }
+
+        .sell-asset-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: translateX(5px);
+        }
+
+        .sell-asset-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .sell-asset-name {
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .sell-asset-detail {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+        }
+
+        .sell-asset-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sell-asset-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        .sell-asset-btn.sell-house {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+        }
+
+        .sell-asset-btn.sell-house:hover {
+            box-shadow: 0 4px 15px rgba(243, 156, 18, 0.4);
+        }
+
+        .sell-modal-buttons {
+            padding: 20px 30px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+
+        .sell-modal-btn {
+            padding: 12px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .sell-modal-btn.bankrupt {
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .sell-modal-btn.bankrupt:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .bankrupt-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+        }
+
+        .bankrupt-modal.show { display: flex; }
+
+        .bankrupt-modal-content {
+            text-align: center;
+            padding: 50px;
+            background: linear-gradient(145deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 30px;
+            border: 2px solid rgba(231, 76, 60, 0.5);
+            box-shadow: 0 0 60px rgba(231, 76, 60, 0.3);
+            animation: modalPop 0.5s ease;
+        }
+
+        .bankrupt-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: shake 0.5s infinite;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: rotate(0deg); }
+            25% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+        }
+
+        .bankrupt-modal-content h2 {
+            color: #e74c3c;
+            font-size: 48px;
+            margin: 0 0 15px 0;
+        }
+
+        .bankrupt-modal-content p {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+
+        .bankrupt-buttons {
+            display: flex;
+            justify-content: center;
+        }
+
+        .bankrupt-btn {
+            padding: 15px 50px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .bankrupt-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        .land-modal-header {
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 215, 0, 0.05) 100%);
+            padding: 25px 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .land-modal-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #ffd700 0%, #f39c12 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: 0 8px 20px rgba(255, 215, 0, 0.3);
+        }
+
+        .land-modal-title {
+            flex: 1;
+        }
+
+        .land-modal-title h2 {
+            color: #fff;
+            font-size: 26px;
+            margin: 0;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .land-modal-title p {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 13px;
+            margin: 6px 0 0 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .land-modal-body {
+            padding: 25px 30px;
+        }
+
+        .land-modal-desc {
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 14px;
+            line-height: 1.8;
+            margin-bottom: 20px;
+            padding: 18px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 14px;
+            border-left: 3px solid #ffd700;
+            position: relative;
+        }
+
+        .land-modal-desc::before {
+            content: '📖';
+            position: absolute;
+            top: -10px;
+            right: 15px;
+            font-size: 20px;
+        }
+
+        .land-modal-info {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .land-info-column {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .land-info-column.cost {
+            border-color: rgba(231, 76, 60, 0.3);
+            background: linear-gradient(180deg, rgba(231, 76, 60, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+        }
+
+        .land-info-column.income {
+            border-color: rgba(46, 204, 113, 0.3);
+            background: linear-gradient(180deg, rgba(46, 204, 113, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+        }
+
+        .land-info-column-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .land-info-column.cost .land-info-column-title {
+            color: #e74c3c;
+        }
+
+        .land-info-column.income .land-info-column-title {
+            color: #2ecc71;
+        }
+
+        .land-info-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .land-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            transition: all 0.2s;
+        }
+
+        .land-info-row:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .land-info-row-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 13px;
+        }
+
+        .land-info-row-value {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .land-info-column.cost .land-info-row-value {
+            color: #e74c3c;
+        }
+
+        .land-info-column.income .land-info-row-value {
+            color: #2ecc71;
+        }
+
+        .land-info-item {
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            text-align: center;
+            transition: all 0.2s;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .land-info-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .land-info-item.highlight {
+            grid-column: span 2;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(243, 156, 18, 0.1) 100%);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+
+        .land-info-icon {
+            font-size: 18px;
+            margin-bottom: 6px;
+        }
+
+        .land-info-label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .land-info-value {
+            color: #ffd700;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .land-info-item.highlight .land-info-value {
+            font-size: 28px;
+            background: linear-gradient(135deg, #ffd700, #f39c12);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .land-action-text {
+            color: #fff;
+            text-align: center;
+            font-size: 16px;
+            margin-bottom: 15px;
+            padding: 15px 20px;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(243, 156, 18, 0.1) 100%);
+            border-radius: 14px;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            line-height: 1.6;
+        }
+
+        .land-action-text strong {
+            color: #ffd700;
+            font-size: 20px;
+        }
+
+        .land-action-text.rent { 
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.2) 0%, rgba(192, 57, 43, 0.15) 100%);
+            border-color: rgba(231, 76, 60, 0.4);
+        }
+        .land-action-text.rent strong { color: #ff7675; }
+        
+        .land-action-text.tax { 
+            background: linear-gradient(135deg, rgba(243, 156, 18, 0.2) 0%, rgba(230, 126, 34, 0.15) 100%);
+            border-color: rgba(243, 156, 18, 0.4);
+        }
+        .land-action-text.tax strong { color: #ffeaa7; }
+
+        .land-modal-buttons {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        }
+
+        .land-btn {
+            padding: 14px 32px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .land-btn.buy {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            color: #fff;
+        }
+
+        .land-btn.build {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: #fff;
+        }
+
+        .land-btn.skip {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .land-btn.end-turn {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: #fff;
+        }
+
+        .land-btn:hover { transform: translateY(-2px); }
+        .land-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .owner-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .houses-display {
+            font-size: 20px;
+            letter-spacing: 2px;
+        }
+
+        .chance-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+        }
+
+        .chance-modal.show { display: flex; }
+
+        .chance-card-container {
+            perspective: 1000px;
+        }
+
+        .chance-card {
+            width: 380px;
+            height: 450px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.5);
+            animation: cardFlip 0.6s ease;
+        }
+
+        @keyframes cardFlip {
+            from { transform: rotateY(180deg); opacity: 0; }
+            to { transform: rotateY(0deg); opacity: 1; }
+        }
+
+        .chance-card-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .chance-card-text {
+            color: #fff;
+            font-size: 20px;
+            text-align: center;
+            font-weight: bold;
+            line-height: 1.5;
+        }
+
+        .chance-card-amount {
+            margin-top: 20px;
+            font-size: 32px;
+            font-weight: bold;
+        }
+
+        .chance-card-amount.positive { color: #2ecc71; }
+        .chance-card-amount.negative { color: #e74c3c; }
+
+        .chance-rolling {
+            font-size: 80px;
+            animation: spin 0.1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <button class="exit-btn" id="exitBtn">退出游戏</button>
+    
+    <div class="game-container">
+        <div class="players-panel" id="playersPanel"></div>
+        
+        <div class="game-area">
+            <div class="game-header">
+                <div class="game-title">大富翁</div>
+                <div class="game-status" id="gameStatus">连接中...</div>
+            </div>
+            
+            <div class="board-container">
+                <div class="board" id="board"></div>
+                <div class="center-area" id="centerArea">
+                    <div class="center-logo">WORLD</div>
+                    <div class="dice-container">
+                        <div class="dice" id="dice">?</div>
+                    </div>
+                    <div class="current-turn-indicator" id="currentTurnIndicator" style="display: none;">
+                        <span class="turn-piece" id="turnPiece"></span>
+                        <span class="turn-name" id="turnName"></span>
+                    </div>
+                    <button class="roll-btn" id="rollBtn" style="display: none;">掷骰子</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="broadcast-panel">
+            <div class="broadcast-title">游戏消息</div>
+            <div class="broadcast-list" id="broadcastList"></div>
+        </div>
+    </div>
+
+    <div class="overlay" id="waitingOverlay">
+        <div class="overlay-title">大富翁</div>
+        <div class="overlay-subtitle">等待玩家加入...</div>
+        <div class="waiting-players" id="waitingPlayers"></div>
+        <button class="start-btn" id="startBtn">开始游戏 (1/5)</button>
+    </div>
+
+    <div class="overlay" id="selectionOverlay" style="display: none;">
+        <div class="overlay-title">选择你的棋子</div>
+        <div class="overlay-subtitle" id="selectionSubtitle">请选择一个棋子</div>
+        <div class="pieces-grid" id="piecesGrid"></div>
+        <button class="confirm-btn" id="confirmPiece" disabled>确认选择</button>
+    </div>
+
+    <div class="overlay" id="countdownOverlay" style="display: none;">
+        <div class="overlay-title">游戏即将开始</div>
+        <div class="countdown-display" id="countdownDisplay">3</div>
+    </div>
+
+    <div class="chance-modal" id="chanceModal">
+        <div class="chance-card-container">
+            <div class="chance-card" id="chanceCard">
+                <div class="chance-rolling" id="chanceRolling">🎲</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="land-modal" id="landModal">
+        <div class="land-modal-content">
+            <div class="land-modal-header">
+                <div class="land-modal-icon" id="landModalIcon">🏳️</div>
+                <div class="land-modal-title">
+                    <h2 id="landModalName">地块名称</h2>
+                    <p id="landModalType">国家</p>
+                </div>
+            </div>
+            <div class="land-modal-body">
+                <div class="land-modal-desc" id="landModalDesc"></div>
+                <div class="land-modal-info" id="landModalInfo"></div>
+                <div class="land-action-text" id="landActionText" style="display: none;"></div>
+                <div class="land-modal-buttons" id="landModalButtons"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sell-modal" id="sellModal">
+        <div class="sell-modal-content">
+            <div class="sell-modal-header">
+                <div class="sell-modal-icon">💰</div>
+                <h2>资金不足</h2>
+            </div>
+            <div class="sell-modal-body">
+                <div class="sell-info" id="sellInfo"></div>
+                <div class="sell-assets" id="sellAssets"></div>
+            </div>
+            <div class="sell-modal-buttons" id="sellModalButtons"></div>
+        </div>
+    </div>
+
+    <div class="bankrupt-modal" id="bankruptModal">
+        <div class="bankrupt-modal-content">
+            <div class="bankrupt-icon">💔</div>
+            <h2>破产！</h2>
+            <p id="bankruptText">你已无力偿还债务</p>
+            <div class="bankrupt-buttons">
+                <button class="bankrupt-btn" id="confirmBankruptBtn">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room');
+        const isHost = urlParams.get('host') === 'true';
+        const playerName = urlParams.get('name') || '玩家';
+
+        const PIECES = ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚐', '🚚', '🚛', '🚜', '🚲', '🏍️', '✈️'];
+        const PIECE_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#e91e63', '#00bcd4', '#8bc34a', '#ff5722', '#795548', '#607d8b', '#ff9800', '#03a9f4', '#673ab7'];
+        
+        let board = [];
+        let players = [];
+        let myPiece = null;
+        let myColor = null;
+        let selectedPiece = null;
+        let currentTurn = 0;
+        let gameStarted = false;
+        let selectionPhase = false;
+        let playerPositions = {};
+        let currentLandCell = null;
+        let currentLandAction = null;
+
+        function getPieceColor(piece) {
+            const index = PIECES.indexOf(piece);
+            return index >= 0 ? PIECE_COLORS[index] : '#fff';
+        }
+
+        function addBroadcast(message, type = '') {
+            const list = document.getElementById('broadcastList');
+            const item = document.createElement('div');
+            item.className = `broadcast-item ${type}`;
+            item.textContent = message;
+            list.insertBefore(item, list.firstChild);
+            
+            if (list.children.length > 50) {
+                list.removeChild(list.lastChild);
+            }
+        }
+
+        function showChanceCardAnimation(card, callback) {
+            const modal = document.getElementById('chanceModal');
+            const cardEl = document.getElementById('chanceCard');
+            const rollingEl = document.getElementById('chanceRolling');
+            
+            modal.classList.add('show');
+            cardEl.innerHTML = '<div class="chance-rolling">🎲</div>';
+            
+            let rollCount = 0;
+            const rollInterval = setInterval(() => {
+                rollCount++;
+                const emojis = ['🎁', '🎲', '🎰', '🎯', '🎪', ' ticket'];
+                cardEl.querySelector('.chance-rolling').textContent = emojis[rollCount % emojis.length];
+                
+                if (rollCount >= 15) {
+                    clearInterval(rollInterval);
+                    
+                    setTimeout(() => {
+                        let icon = '🎁';
+                        let amountClass = '';
+                        let amountText = '';
+                        
+                        if (card.money) {
+                            if (card.money > 0) {
+                                icon = '💰';
+                                amountClass = 'positive';
+                                amountText = `+$${card.money}`;
+                            } else {
+                                icon = '💸';
+                                amountClass = 'negative';
+                                amountText = `-$${Math.abs(card.money)}`;
+                            }
+                        } else if (card.steps) {
+                            if (card.steps > 0) {
+                                icon = '🚀';
+                                amountText = `前进 ${card.steps} 步`;
+                            } else {
+                                icon = '⬅️';
+                                amountText = `后退 ${Math.abs(card.steps)} 步`;
+                            }
+                        }
+                        
+                        cardEl.innerHTML = `
+                            <div class="chance-card-icon">${icon}</div>
+                            <div class="chance-card-text">${card.text}</div>
+                            <div class="chance-card-amount ${amountClass}">${amountText}</div>
+                        `;
+                        
+                        setTimeout(() => {
+                            modal.classList.remove('show');
+                            if (callback) callback();
+                        }, 2000);
+                    }, 300);
+                }
+            }, 100);
+        }
+
+        function animateTaxPayment(playerIdx, cellIndex, amount) {
+            const playerCard = document.querySelectorAll('.player-card')[playerIdx];
+            const cellEl = document.querySelector(`.cell[data-index="${cellIndex}"]`);
+            
+            if (!playerCard || !cellEl) return;
+            
+            const startX = 110;
+            const startY = playerCard.offsetTop + playerCard.offsetHeight / 2 + 70;
+            const endX = cellEl.offsetLeft + cellEl.offsetWidth / 2;
+            const endY = cellEl.offsetTop + cellEl.offsetHeight / 2;
+            
+            const moneyCount = Math.min(8, Math.ceil(amount / 200));
+            
+            for (let i = 0; i < moneyCount; i++) {
+                setTimeout(() => {
+                    const money = document.createElement('div');
+                    money.textContent = '💵';
+                    money.style.cssText = `
+                        position: fixed;
+                        left: ${startX}px;
+                        top: ${startY}px;
+                        font-size: 20px;
+                        z-index: 1000;
+                        pointer-events: none;
+                    `;
+                    document.body.appendChild(money);
+                    
+                    setTimeout(() => {
+                        const controlX = (startX + endX) / 2 + (Math.random() - 0.5) * 80;
+                        const controlY = Math.min(startY, endY) - 80 - Math.random() * 40;
+                        
+                        money.animate([
+                            { left: startX + 'px', top: startY + 'px', opacity: 1 },
+                            { left: controlX + 'px', top: controlY + 'px', opacity: 1 },
+                            { left: endX + 'px', top: endY + 'px', opacity: 0 }
+                        ], {
+                            duration: 700 + Math.random() * 300,
+                            easing: 'ease-in-out',
+                            fill: 'forwards'
+                        });
+                        
+                        setTimeout(() => money.remove(), 1000);
+                    }, 50);
+                }, i * 60);
+            }
+        }
+
+        function initBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+            
+            const boardSize = 700;
+            const cellSize = 60;
+            const padding = 20;
+            
+            for (let i = 0; i < 40; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.dataset.index = i;
+                
+                let x, y;
+                
+                if (i <= 10) {
+                    x = boardSize - padding - cellSize - (i * cellSize);
+                    y = boardSize - padding - cellSize;
+                } else if (i <= 19) {
+                    const pos = i - 10;
+                    x = padding;
+                    y = boardSize - padding - cellSize - (pos * cellSize);
+                } else if (i <= 30) {
+                    const pos = i - 20;
+                    x = padding + (pos * cellSize);
+                    y = padding;
+                } else {
+                    const pos = i - 30;
+                    x = boardSize - padding - cellSize;
+                    y = padding + (pos * cellSize);
+                }
+                
+                cell.style.left = x + 'px';
+                cell.style.top = y + 'px';
+                cell.style.width = cellSize + 'px';
+                cell.style.height = cellSize + 'px';
+                
+                if (board[i]) {
+                    const data = board[i];
+                    cell.classList.add(data.type);
+                    
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'cell-name';
+                    nameEl.textContent = data.name;
+                    cell.appendChild(nameEl);
+                    
+                    if (data.price) {
+                        const priceEl = document.createElement('div');
+                        priceEl.className = 'cell-price';
+                        priceEl.textContent = '$' + data.price;
+                        cell.appendChild(priceEl);
+                    }
+                    
+                    cell.addEventListener('click', () => {
+                        if (gameStarted) {
+                            showCellInfo(i);
+                        }
+                    });
+                }
+                
+                boardEl.appendChild(cell);
+            }
+        }
+
+        function showCellInfo(cellIndex) {
+            const cellData = board[cellIndex];
+            if (!cellData) return;
+            
+            const modal = document.getElementById('landModal');
+            const iconEl = document.getElementById('landModalIcon');
+            const nameEl = document.getElementById('landModalName');
+            const typeEl = document.getElementById('landModalType');
+            const descEl = document.getElementById('landModalDesc');
+            const infoEl = document.getElementById('landModalInfo');
+            const actionTextEl = document.getElementById('landActionText');
+            const buttonsEl = document.getElementById('landModalButtons');
+            
+            nameEl.textContent = cellData.name;
+            descEl.textContent = cellData.desc || '';
+            
+            const typeNames = {
+                property: '国家',
+                start: '起点',
+                jail: '监狱',
+                parking: '免费停车',
+                jail: '监狱',
+                chance: '机会',
+                tax: '税收'
+            };
+            typeEl.textContent = typeNames[cellData.type] || cellData.type;
+            
+            const typeIcons = {
+                property: '🌍',
+                start: '🚀',
+                jail: '🔒',
+                parking: '🅿️',
+                jail: '🔒',
+                chance: '❓',
+                tax: '💰'
+            };
+            iconEl.textContent = typeIcons[cellData.type] || '🏳️';
+            
+            infoEl.innerHTML = '';
+            actionTextEl.style.display = 'none';
+            buttonsEl.innerHTML = '';
+            
+            if (cellData.type === 'property') {
+                infoEl.innerHTML = `
+                    <div class="land-info-column cost">
+                        <div class="land-info-column-title">💸 投入成本</div>
+                        <div class="land-info-list">
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏷️ 地价</span>
+                                <span class="land-info-row-value">$${cellData.price}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🔨 建房费用</span>
+                                <span class="land-info-row-value">$${cellData.housePrice}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="land-info-column income">
+                        <div class="land-info-column-title">💰 过路费收益</div>
+                        <div class="land-info-list">
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">📄 空地</span>
+                                <span class="land-info-row-value">$${cellData.rentBase}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏠 1间房</span>
+                                <span class="land-info-row-value">$${cellData.rent1}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏠🏠 2间房</span>
+                                <span class="land-info-row-value">$${cellData.rent2}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏢 公寓</span>
+                                <span class="land-info-row-value">$${cellData.rentApartment}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                if (cellData.owner) {
+                    const ownerPlayer = players.find(p => p.name === cellData.owner);
+                    const ownerColor = ownerPlayer ? getPieceColor(ownerPlayer.piece) : '#fff';
+                    
+                    infoEl.innerHTML += `
+                        <div style="grid-column: 1 / -1; margin-top: 12px; padding: 12px 16px; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid ${ownerColor}40;">
+                            <span style="color: rgba(255,255,255,0.7);">👤 所有者</span>
+                            <span style="color: ${ownerColor}; font-weight: 600; font-size: 16px;">${cellData.owner} ${ownerPlayer?.piece || ''}</span>
+                        </div>
+                    `;
+                    
+                    if (cellData.isApartment) {
+                        infoEl.innerHTML += `
+                            <div style="grid-column: 1 / -1; margin-top: 8px; padding: 10px 16px; background: rgba(46,204,113,0.1); border-radius: 10px; text-align: center; color: #2ecc71; font-size: 16px;">
+                                🏢 高级公寓
+                            </div>
+                        `;
+                    } else if (cellData.houses > 0) {
+                        infoEl.innerHTML += `
+                            <div style="grid-column: 1 / -1; margin-top: 8px; padding: 10px 16px; background: rgba(255,215,0,0.1); border-radius: 10px; text-align: center; color: #ffd700; font-size: 16px;">
+                                ${'🏠'.repeat(cellData.houses)} ${cellData.houses}间房屋
+                            </div>
+                        `;
+                    }
+                }
+                
+                buttonsEl.innerHTML = `<button class="land-btn skip" id="closeInfoBtn">关闭</button>`;
+            } else if (cellData.type === 'tax') {
+                infoEl.innerHTML = `
+                    <div style="flex: 1; text-align: center; padding: 30px 20px; background: linear-gradient(180deg, rgba(243, 156, 18, 0.15) 0%, rgba(230, 126, 34, 0.1) 100%); border-radius: 16px; border: 1px solid rgba(243, 156, 18, 0.3);">
+                        <div style="font-size: 40px; margin-bottom: 10px;">💸</div>
+                        <div style="color: rgba(255,255,255,0.6); font-size: 14px; margin-bottom: 8px;">税款</div>
+                        <div style="color: #f39c12; font-size: 32px; font-weight: 700;">$${cellData.price}</div>
+                    </div>
+                `;
+                buttonsEl.innerHTML = `<button class="land-btn skip" id="closeInfoBtn">关闭</button>`;
+            } else {
+                buttonsEl.innerHTML = `<button class="land-btn skip" id="closeInfoBtn">关闭</button>`;
+            }
+            
+            modal.classList.add('show');
+            
+            const closeBtn = document.getElementById('closeInfoBtn');
+            if (closeBtn) {
+                closeBtn.onclick = () => {
+                    modal.classList.remove('show');
+                };
+            }
+        }
+
+        function updatePlayersPanel() {
+            const panel = document.getElementById('playersPanel');
+            panel.innerHTML = '';
+            
+            players.forEach((player, index) => {
+                const card = document.createElement('div');
+                card.className = 'player-card';
+                const isMyTurn = index === currentTurn && gameStarted;
+                if (isMyTurn) {
+                    card.classList.add('active');
+                }
+                
+                const color = getPieceColor(player.piece);
+                
+                card.style.borderColor = color;
+                card.style.boxShadow = isMyTurn 
+                    ? `0 0 30px ${color}80, inset 0 3px 0 ${color}` 
+                    : `0 0 20px ${color}40, inset 0 3px 0 ${color}`;
+                card.style.background = `linear-gradient(180deg, ${color}15 0%, rgba(255,255,255,0.08) 100%)`;
+                
+                const turnBadge = isMyTurn ? '<span class="turn-badge">🎯 回合中</span>' : '';
+                
+                card.innerHTML = `
+                    <div class="player-piece ${isMyTurn ? 'turn' : ''}" style="color: ${color}; border-color: ${color}; text-shadow: 0 0 10px ${color};">${player.piece || '❓'}</div>
+                    <div class="player-name" style="color: ${color}">${player.name}${player.isHost ? ' (房主)' : ''}</div>
+                    ${turnBadge}
+                    <div class="player-money">${player.money}</div>
+                `;
+                
+                panel.appendChild(card);
+            });
+        }
+
+        function updateWaitingPlayers() {
+            const container = document.getElementById('waitingPlayers');
+            container.innerHTML = '';
+            
+            players.forEach(player => {
+                const div = document.createElement('div');
+                div.className = 'waiting-player';
+                div.innerHTML = `
+                    <span class="name">${player.name}</span>
+                    ${player.isHost ? '<span class="host-badge">房主</span>' : ''}
+                `;
+                container.appendChild(div);
+            });
+            
+            const startBtn = document.getElementById('startBtn');
+            startBtn.textContent = `开始游戏 (${players.length}/5)`;
+            startBtn.disabled = !isHost || players.length < 1;
+        }
+
+        function showPieceSelector() {
+            selectionPhase = true;
+            document.getElementById('waitingOverlay').style.display = 'none';
+            document.getElementById('selectionOverlay').style.display = 'flex';
+            
+            const grid = document.getElementById('piecesGrid');
+            grid.innerHTML = '';
+            
+            const usedPieces = players.map(p => p.piece).filter(Boolean);
+            
+            PIECES.forEach((piece, index) => {
+                const option = document.createElement('div');
+                option.className = 'piece-option';
+                option.innerHTML = `
+                    <span>${piece}</span>
+                    <div class="color-bar" style="background: ${PIECE_COLORS[index]}"></div>
+                `;
+                option.dataset.piece = piece;
+                option.dataset.color = PIECE_COLORS[index];
+                
+                if (usedPieces.includes(piece)) {
+                    option.classList.add('disabled');
+                } else {
+                    option.addEventListener('click', () => {
+                        document.querySelectorAll('.piece-option').forEach(o => o.classList.remove('selected'));
+                        option.classList.add('selected');
+                        selectedPiece = piece;
+                        document.getElementById('confirmPiece').disabled = false;
+                    });
+                }
+                
+                grid.appendChild(option);
+            });
+            
+            updateSelectionSubtitle();
+        }
+
+        function updateSelectionSubtitle() {
+            const subtitle = document.getElementById('selectionSubtitle');
+            const waitingCount = players.filter(p => !p.piece).length;
+            subtitle.textContent = `还有 ${waitingCount} 位玩家未选择棋子`;
+        }
+
+        function getCellPosition(index) {
+            const cell = document.querySelector(`.cell[data-index="${index}"]`);
+            if (!cell) return null;
+            return { left: cell.offsetLeft, top: cell.offsetTop };
+        }
+
+        function moveMarkerStep(marker, fromPos, toPos, playerIndex) {
+            return new Promise(resolve => {
+                const offset = playerIndex * 5;
+                marker.style.left = (toPos.left + 15 + offset) + 'px';
+                marker.style.top = (toPos.top + 15 + offset) + 'px';
+                marker.classList.add('jumping');
+                
+                setTimeout(() => {
+                    marker.classList.remove('jumping');
+                    resolve();
+                }, 200);
+            });
+        }
+
+        async function animatePlayerMove(playerIdx, fromPosition, toPosition) {
+            const marker = document.getElementById(`marker-${playerIdx}`);
+            if (!marker) return;
+            
+            let totalSteps;
+            let isClockwise;
+            
+            if (toPosition > fromPosition) {
+                const diff = toPosition - fromPosition;
+                if (diff <= 20) {
+                    totalSteps = diff;
+                    isClockwise = false;
+                } else {
+                    totalSteps = 40 - diff;
+                    isClockwise = true;
+                }
+            } else {
+                const diff = fromPosition - toPosition;
+                if (diff <= 20) {
+                    totalSteps = diff;
+                    isClockwise = true;
+                } else {
+                    totalSteps = 40 - diff;
+                    isClockwise = false;
+                }
+            }
+            
+            let currentPos = fromPosition;
+            
+            for (let step = 0; step < totalSteps; step++) {
+                if (isClockwise) {
+                    currentPos = (currentPos - 1 + 40) % 40;
+                } else {
+                    currentPos = (currentPos + 1) % 40;
+                }
+                const pos = getCellPosition(currentPos);
+                if (pos) {
+                    await moveMarkerStep(marker, null, pos, playerIdx);
+                }
+            }
+            
+            playerPositions[players[playerIdx].name] = toPosition;
+        }
+
+        function updatePlayerMarkers() {
+            document.querySelectorAll('.player-marker').forEach(m => m.remove());
+            
+            players.forEach((player, idx) => {
+                if (!player.piece) return;
+                
+                const cell = document.querySelector(`.cell[data-index="${player.position}"]`);
+                if (!cell) return;
+                
+                const marker = document.createElement('div');
+                marker.className = 'player-marker';
+                marker.id = `marker-${idx}`;
+                marker.textContent = player.piece;
+                
+                const color = getPieceColor(player.piece);
+                const offset = idx * 5;
+                marker.style.left = (cell.offsetLeft + 15 + offset) + 'px';
+                marker.style.top = (cell.offsetTop + 15 + offset) + 'px';
+                marker.style.textShadow = `0 0 10px ${color}`;
+                marker.style.borderColor = color;
+                marker.style.boxShadow = `0 0 10px ${color}`;
+                
+                playerPositions[player.name] = player.position;
+                
+                document.getElementById('board').appendChild(marker);
+            });
+        }
+
+        function showSellModal(landAction) {
+            const modal = document.getElementById('sellModal');
+            const infoEl = document.getElementById('sellInfo');
+            const assetsEl = document.getElementById('sellAssets');
+            const buttonsEl = document.getElementById('sellModalButtons');
+            
+            infoEl.innerHTML = `需要支付 <strong>$${landAction.amount}</strong>，当前余额 $0，还需 <strong>$${landAction.amount - landAction.paid}</strong>`;
+            
+            assetsEl.innerHTML = '';
+            
+            if (landAction.sellableProperties && landAction.sellableProperties.length > 0) {
+                landAction.sellableProperties.forEach(prop => {
+                    const item = document.createElement('div');
+                    item.className = 'sell-asset-item';
+                    
+                    let detailText = `🏷️ 售价 $${prop.price} (买入价60%)`;
+                    if (prop.isApartment) {
+                        detailText = `🏢 高级公寓 - 售价 $${prop.price}`;
+                    } else if (prop.houses > 0) {
+                        detailText = `${'🏠'.repeat(prop.houses)} ${prop.houses}间房 - 售价 $${prop.price}`;
+                    }
+                    
+                    const sellBtnText = prop.houses > 0 || prop.isApartment ? '卖房' : '卖地';
+                    const sellBtnClass = prop.houses > 0 || prop.isApartment ? 'sell-house' : '';
+                    const sellFn = prop.houses > 0 || prop.isApartment ? 'sellHouse' : 'sellProperty';
+                    
+                    item.innerHTML = `
+                        <div class="sell-asset-info">
+                            <span class="sell-asset-name">${prop.name}</span>
+                            <span class="sell-asset-detail">${detailText}</span>
+                        </div>
+                        <button class="sell-asset-btn ${sellBtnClass}" data-index="${prop.index}" data-fn="${sellFn}">${sellBtnText}</button>
+                    `;
+                    assetsEl.appendChild(item);
+                });
+                
+                buttonsEl.innerHTML = `<button class="sell-modal-btn bankrupt" id="declareBankruptBtn">宣布破产</button>`;
+            } else {
+                buttonsEl.innerHTML = `<button class="sell-modal-btn bankrupt" id="declareBankruptBtn">确认破产</button>`;
+            }
+            
+            modal.classList.add('show');
+            
+            document.querySelectorAll('.sell-asset-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const position = parseInt(btn.dataset.index);
+                    const fn = btn.dataset.fn;
+                    
+                    if (fn === 'sellProperty') {
+                        socket.emit('sellProperty', { roomId, position });
+                    } else {
+                        socket.emit('sellHouse', { roomId, position });
+                    }
+                    
+                    modal.classList.remove('show');
+                };
+            });
+            
+            const bankruptBtn = document.getElementById('declareBankruptBtn');
+            if (bankruptBtn) {
+                bankruptBtn.onclick = () => {
+                    modal.classList.remove('show');
+                    showBankruptModal();
+                };
+            }
+        }
+
+        function showBankruptModal() {
+            const modal = document.getElementById('bankruptModal');
+            modal.classList.add('show');
+            
+            const btn = document.getElementById('confirmBankruptBtn');
+            btn.onclick = () => {
+                modal.classList.remove('show');
+                socket.emit('confirmBankrupt', { roomId });
+            };
+        }
+
+        function updateTurnStatus() {
+            const currentPlayer = players[currentTurn];
+            const isMyTurn = currentPlayer && currentPlayer.name === playerName;
+            
+            document.getElementById('rollBtn').disabled = !isMyTurn;
+            document.getElementById('gameStatus').textContent = 
+                isMyTurn ? '轮到你了，请掷骰子' : `等待 ${currentPlayer?.name || '玩家'} 行动`;
+            
+            const indicator = document.getElementById('currentTurnIndicator');
+            const turnPiece = document.getElementById('turnPiece');
+            const turnName = document.getElementById('turnName');
+            
+            if (currentPlayer && gameStarted) {
+                indicator.style.display = 'flex';
+                turnPiece.textContent = currentPlayer.piece || '👤';
+                turnName.textContent = `${currentPlayer.name} 的回合`;
+                
+                const color = getPieceColor(currentPlayer.piece);
+                indicator.style.borderColor = color;
+                indicator.style.background = `linear-gradient(135deg, ${color}30 0%, ${color}15 100%)`;
+                turnName.style.color = color;
+            } else {
+                indicator.style.display = 'none';
+            }
+        }
+
+        function animateRentPayment(cellIndex, ownerName, amount) {
+            const cellEl = document.querySelector(`.cell[data-index="${cellIndex}"]`);
+            if (!cellEl) return;
+            
+            const ownerIdx = players.findIndex(p => p.name === ownerName);
+            const ownerCard = document.querySelectorAll('.player-card')[ownerIdx];
+            if (!ownerCard) return;
+            
+            const startX = cellEl.offsetLeft + cellEl.offsetWidth / 2;
+            const startY = cellEl.offsetTop + cellEl.offsetHeight / 2;
+            
+            const endX = 110;
+            const endY = ownerCard.offsetTop + ownerCard.offsetHeight / 2 + 70;
+            
+            const moneyCount = Math.min(10, Math.ceil(amount / 500));
+            
+            for (let i = 0; i < moneyCount; i++) {
+                setTimeout(() => {
+                    const money = document.createElement('div');
+                    money.className = 'money-animation';
+                    money.textContent = '💵';
+                    money.style.cssText = `
+                        position: fixed;
+                        left: ${startX}px;
+                        top: ${startY}px;
+                        font-size: 24px;
+                        z-index: 1000;
+                        pointer-events: none;
+                        transition: none;
+                    `;
+                    document.body.appendChild(money);
+                    
+                    setTimeout(() => {
+                        const controlX = (startX + endX) / 2 + (Math.random() - 0.5) * 100;
+                        const controlY = Math.min(startY, endY) - 100 - Math.random() * 50;
+                        
+                        money.animate([
+                            { left: startX + 'px', top: startY + 'px', opacity: 1, transform: 'scale(1)' },
+                            { left: controlX + 'px', top: controlY + 'px', opacity: 1, transform: 'scale(1.2)' },
+                            { left: endX + 'px', top: endY + 'px', opacity: 0, transform: 'scale(0.5)' }
+                        ], {
+                            duration: 800 + Math.random() * 400,
+                            easing: 'ease-in-out',
+                            fill: 'forwards'
+                        });
+                        
+                        setTimeout(() => money.remove(), 1200);
+                    }, 50);
+                }, i * 80);
+            }
+        }
+
+        function showLandAction(cell, landAction, isMyAction) {
+            currentLandCell = cell;
+            currentLandAction = landAction;
+            
+            const modal = document.getElementById('landModal');
+            const iconEl = document.getElementById('landModalIcon');
+            const nameEl = document.getElementById('landModalName');
+            const typeEl = document.getElementById('landModalType');
+            const descEl = document.getElementById('landModalDesc');
+            const infoEl = document.getElementById('landModalInfo');
+            const actionTextEl = document.getElementById('landActionText');
+            const buttonsEl = document.getElementById('landModalButtons');
+            
+            nameEl.textContent = cell.name;
+            descEl.textContent = cell.desc || '';
+            
+            const typeNames = {
+                property: '国家',
+                start: '起点',
+                jail: '监狱',
+                parking: '免费停车',
+                jail: '监狱',
+                chance: '机会',
+                tax: '税收'
+            };
+            typeEl.textContent = typeNames[cell.type] || cell.type;
+            
+            const typeIcons = {
+                property: '🌍',
+                start: '🚀',
+                jail: '🔒',
+                parking: '🅿️',
+                jail: '🔒',
+                chance: '❓',
+                tax: '💰'
+            };
+            iconEl.textContent = typeIcons[cell.type] || '🏳️';
+            
+            infoEl.innerHTML = '';
+            actionTextEl.style.display = 'none';
+            buttonsEl.innerHTML = '';
+            
+            if (cell.type === 'property') {
+                infoEl.innerHTML = `
+                    <div class="land-info-column cost">
+                        <div class="land-info-column-title">💸 投入成本</div>
+                        <div class="land-info-list">
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏷️ 地价</span>
+                                <span class="land-info-row-value">$${cell.price}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🔨 建房费用</span>
+                                <span class="land-info-row-value">$${cell.housePrice}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="land-info-column income">
+                        <div class="land-info-column-title">💰 过路费收益</div>
+                        <div class="land-info-list">
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">📄 空地</span>
+                                <span class="land-info-row-value">$${cell.rentBase}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏠 1间房</span>
+                                <span class="land-info-row-value">$${cell.rent1}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏠🏠 2间房</span>
+                                <span class="land-info-row-value">$${cell.rent2}</span>
+                            </div>
+                            <div class="land-info-row">
+                                <span class="land-info-row-label">🏢 公寓</span>
+                                <span class="land-info-row-value">$${cell.rentApartment}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                if (cell.owner) {
+                    const ownerPlayer = players.find(p => p.name === cell.owner);
+                    const ownerColor = ownerPlayer ? getPieceColor(ownerPlayer.piece) : '#fff';
+                    infoEl.innerHTML += `
+                        <div style="grid-column: 1 / -1; margin-top: 12px; padding: 12px 16px; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid ${ownerColor}40;">
+                            <span style="color: rgba(255,255,255,0.7);">👤 所有者</span>
+                            <span style="color: ${ownerColor}; font-weight: 600; font-size: 16px;">${cell.owner} ${ownerPlayer?.piece || ''}</span>
+                        </div>
+                    `;
+                    
+                    if (cell.isApartment) {
+                        infoEl.innerHTML += `
+                            <div style="grid-column: 1 / -1; margin-top: 8px; padding: 10px 16px; background: rgba(46,204,113,0.1); border-radius: 10px; text-align: center; color: #2ecc71; font-size: 16px;">
+                                🏢 高级公寓
+                            </div>
+                        `;
+                    } else if (cell.houses > 0) {
+                        infoEl.innerHTML += `
+                            <div style="grid-column: 1 / -1; margin-top: 8px; padding: 10px 16px; background: rgba(255,215,0,0.1); border-radius: 10px; text-align: center; color: #ffd700; font-size: 16px;">
+                                ${'🏠'.repeat(cell.houses)} ${cell.houses}间房屋
+                            </div>
+                        `;
+                    }
+                }
+                
+                if (landAction && isMyAction) {
+                    if (landAction.type === 'rent') {
+                        actionTextEl.innerHTML = `💸 缴纳过路费 <strong>$${landAction.amount}</strong> 给 ${landAction.owner}`;
+                        actionTextEl.className = 'land-action-text rent';
+                        actionTextEl.style.display = 'block';
+                        
+                        animateRentPayment(cell.index, landAction.owner, landAction.amount);
+                        
+                        buttonsEl.innerHTML = `
+                            <button class="land-btn end-turn" id="endTurnBtn">结束回合</button>
+                        `;
+                    } else if (landAction.type === 'cannotAfford') {
+                        modal.classList.remove('show');
+                        showSellModal(landAction);
+                    } else if (landAction.type === 'bankrupt') {
+                        modal.classList.remove('show');
+                        showBankruptModal();
+                    } else if (landAction.type === 'canBuy') {
+                        const currentPlayer = players[currentTurn];
+                        const canAfford = currentPlayer && currentPlayer.money >= cell.price;
+                        
+                        actionTextEl.innerHTML = `✨ 可以购买此地，价格 <strong>$${cell.price}</strong>`;
+                        actionTextEl.className = 'land-action-text';
+                        actionTextEl.style.display = 'block';
+                        
+                        buttonsEl.innerHTML = `
+                            <button class="land-btn buy" id="buyBtn" ${!canAfford ? 'disabled' : ''}>🛒 购买 $${cell.price}</button>
+                            <button class="land-btn skip" id="skipBtn">放弃</button>
+                        `;
+                    } else if (landAction.type === 'canBuild') {
+                        const currentPlayer = players[currentTurn];
+                        const housePrice = landAction.housePrice || cell.housePrice;
+                        const canAfford = currentPlayer && currentPlayer.money >= housePrice;
+                        const housesLeft = 3 - landAction.houses;
+                        
+                        if (housesLeft > 0) {
+                            actionTextEl.innerHTML = `🔨 可以建房，价格 <strong>$${housePrice}</strong>/间 (还需${housesLeft}间升级公寓)`;
+                            actionTextEl.className = 'land-action-text';
+                            actionTextEl.style.display = 'block';
+                            
+                            buttonsEl.innerHTML = `
+                                <button class="land-btn build" id="buildBtn" ${!canAfford ? 'disabled' : ''}>🏠 建房 $${housePrice}</button>
+                                <button class="land-btn skip" id="skipBtn">放弃</button>
+                            `;
+                        } else {
+                            actionTextEl.innerHTML = '🎉 此地已满级';
+                            actionTextEl.className = 'land-action-text';
+                            actionTextEl.style.display = 'block';
+                            buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+                        }
+                    }
+                } else if (!landAction || !landAction.type) {
+                    if (isMyAction) {
+                        actionTextEl.innerHTML = `📍 停在 ${cell.name}`;
+                        actionTextEl.className = 'land-action-text';
+                        actionTextEl.style.display = 'block';
+                    }
+                    buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+                } else if (!landAction && isMyAction) {
+                    buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+                }
+            } else if (cell.type === 'tax') {
+                infoEl.innerHTML = `
+                    <div style="flex: 1; text-align: center; padding: 30px 20px; background: linear-gradient(180deg, rgba(243, 156, 18, 0.15) 0%, rgba(230, 126, 34, 0.1) 100%); border-radius: 16px; border: 1px solid rgba(243, 156, 18, 0.3);">
+                        <div style="font-size: 40px; margin-bottom: 10px;">💸</div>
+                        <div style="color: rgba(255,255,255,0.6); font-size: 14px; margin-bottom: 8px;">税款</div>
+                        <div style="color: #f39c12; font-size: 32px; font-weight: 700;">$${cell.price}</div>
+                    </div>
+                `;
+                
+                if (landAction && isMyAction) {
+                    actionTextEl.innerHTML = `💰 已缴纳税款 <strong>$${landAction.amount}</strong>`;
+                    actionTextEl.className = 'land-action-text tax';
+                    actionTextEl.style.display = 'block';
+                }
+                
+                buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+            } else if (cell.type === 'jail') {
+                if (landAction && isMyAction) {
+                    actionTextEl.innerHTML = '🔒 你在监狱！下一回合跳过';
+                    actionTextEl.className = 'land-action-text rent';
+                    actionTextEl.style.display = 'block';
+                }
+                buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+            } else if (cell.type === 'chance') {
+                if (landAction && landAction.card) {
+                    let resultText = landAction.card.text;
+                    if (landAction.card.money) {
+                        resultText += ` (${landAction.card.money > 0 ? '🎁 +' : ''}$${landAction.card.money})`;
+                    } else if (landAction.card.steps) {
+                        resultText += ` (${landAction.card.steps > 0 ? '➡️ 前进' : '⬅️ 后退'} ${Math.abs(landAction.card.steps)} 步)`;
+                    }
+                    actionTextEl.innerHTML = `🎴 ${resultText}`;
+                    actionTextEl.className = 'land-action-text';
+                    actionTextEl.style.display = 'block';
+                } else {
+                    actionTextEl.innerHTML = '🎰 抽取一张机会卡...';
+                    actionTextEl.className = 'land-action-text';
+                    actionTextEl.style.display = 'block';
+                }
+                buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+            } else if (cell.type === 'parking' || cell.type === 'jail' || cell.type === 'start') {
+                if (isMyAction) {
+                    actionTextEl.innerHTML = `🏁 停在 ${cell.name}`;
+                    actionTextEl.className = 'land-action-text';
+                    actionTextEl.style.display = 'block';
+                }
+                buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+            } else {
+                buttonsEl.innerHTML = `<button class="land-btn end-turn" id="endTurnBtn">结束回合</button>`;
+            }
+            
+            modal.classList.add('show');
+            
+            const buyBtn = document.getElementById('buyBtn');
+            const buildBtn = document.getElementById('buildBtn');
+            const skipBtn = document.getElementById('skipBtn');
+            const endTurnBtn = document.getElementById('endTurnBtn');
+            
+            if (buyBtn) {
+                buyBtn.onclick = () => {
+                    const room = new URLSearchParams(window.location.search).get('room');
+                    socket.emit('buyProperty', { roomId: room, position: cell.index });
+                    modal.classList.remove('show');
+                };
+            }
+            
+            if (buildBtn) {
+                buildBtn.onclick = () => {
+                    const room = new URLSearchParams(window.location.search).get('room');
+                    socket.emit('buildHouse', { roomId: room, position: cell.index });
+                    modal.classList.remove('show');
+                };
+            }
+            
+            if (skipBtn) {
+                skipBtn.onclick = () => {
+                    const room = new URLSearchParams(window.location.search).get('room');
+                    socket.emit('skipAction', { roomId: room });
+                    modal.classList.remove('show');
+                };
+            }
+            
+            if (endTurnBtn) {
+                endTurnBtn.onclick = () => {
+                    const room = new URLSearchParams(window.location.search).get('room');
+                    socket.emit('endTurn', { roomId: room });
+                    modal.classList.remove('show');
+                };
+            }
+        }
+
+        function updateCellDisplay(cellData) {
+            const cellEl = document.querySelector(`.cell[data-index="${cellData.index}"]`);
+            if (!cellEl) return;
+            
+            const existingOwner = cellEl.querySelector('.cell-owner');
+            const existingHouses = cellEl.querySelector('.cell-houses');
+            if (existingOwner) existingOwner.remove();
+            if (existingHouses) existingHouses.remove();
+            
+            if (cellData.owner) {
+                const ownerPlayer = players.find(p => p.name === cellData.owner);
+                const ownerColor = ownerPlayer ? getPieceColor(ownerPlayer.piece) : '#fff';
+                
+                cellEl.style.borderColor = ownerColor;
+                cellEl.style.boxShadow = `0 0 10px ${ownerColor}40`;
+                
+                const housesEl = document.createElement('div');
+                housesEl.className = 'cell-houses';
+                housesEl.style.cssText = 'font-size: 10px; margin-top: 2px;';
+                
+                if (cellData.isApartment) {
+                    housesEl.textContent = '🏢';
+                } else if (cellData.houses > 0) {
+                    housesEl.textContent = '🏠'.repeat(cellData.houses);
+                }
+                
+                cellEl.appendChild(housesEl);
+            }
+        }
+
+        socket.on('connect', () => {
+            if (roomId) {
+                socket.emit('joinMonopolyRoom', { roomId, playerName });
+            } else {
+                socket.emit('createMonopolyRoom', { playerName });
+            }
+        });
+
+        socket.on('monopolyRoomCreated', (data) => {
+            console.log('房间创建成功:', data.roomId);
+            history.replaceState({}, '', `?room=${data.roomId}&host=true&name=${encodeURIComponent(playerName)}`);
+        });
+
+        socket.on('waitingForMonopolyPlayer', (data) => {
+            players = data.players;
+            updateWaitingPlayers();
+            updatePlayersPanel();
+        });
+
+        socket.on('monopolySelectionStarted', (data) => {
+            players = data.players;
+            showPieceSelector();
+            updatePlayersPanel();
+        });
+
+        socket.on('playerPieceSelected', (data) => {
+            players = data.players;
+            updatePlayersPanel();
+            updateSelectionSubtitle();
+            
+            const grid = document.getElementById('piecesGrid');
+            if (grid.children.length > 0) {
+                document.querySelectorAll('.piece-option').forEach(option => {
+                    if (data.piece === option.dataset.piece) {
+                        option.classList.add('disabled');
+                    }
+                });
+            }
+        });
+
+        socket.on('allPiecesSelected', (data) => {
+            document.getElementById('selectionOverlay').style.display = 'none';
+            document.getElementById('countdownOverlay').style.display = 'flex';
+            document.getElementById('countdownDisplay').textContent = data.countdown;
+        });
+
+        socket.on('gameCountdown', (data) => {
+            document.getElementById('countdownDisplay').textContent = data.countdown;
+        });
+
+        socket.on('monopolyGameStarted', (data) => {
+            board = data.board;
+            players = data.players;
+            currentTurn = data.currentTurn;
+            gameStarted = true;
+            
+            players.forEach(p => playerPositions[p.name] = p.position);
+            
+            document.getElementById('countdownOverlay').style.display = 'none';
+            document.getElementById('waitingOverlay').style.display = 'none';
+            document.getElementById('selectionOverlay').style.display = 'none';
+            
+            initBoard();
+            updatePlayersPanel();
+            updatePlayerMarkers();
+            
+            document.getElementById('rollBtn').style.display = 'block';
+            updateTurnStatus();
+        });
+
+        socket.on('diceRolled', async (data) => {
+            const diceEl = document.getElementById('dice');
+            const rollBtn = document.getElementById('rollBtn');
+            
+            diceEl.classList.add('rolling');
+            rollBtn.disabled = true;
+            
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            diceEl.classList.remove('rolling');
+            diceEl.textContent = data.dice;
+            
+            addBroadcast(`${data.playerName} 掷出了 ${data.dice} 点`, '');
+            document.getElementById('gameStatus').textContent = 
+                `${data.playerName} 掷出了 ${data.dice}`;
+            
+            const playerIdx = players.findIndex(p => p.name === data.playerName);
+            if (playerIdx >= 0) {
+                await animatePlayerMove(playerIdx, data.oldPosition, data.newPosition);
+            }
+            
+            players = data.players;
+            currentTurn = data.currentTurn;
+            updatePlayersPanel();
+            
+            const isMyAction = players[currentTurn] && players[currentTurn].name === playerName;
+            
+            if (data.passedStart) {
+                addBroadcast(`${data.playerName} 经过起点获得 $2000！`, 'start');
+                document.getElementById('gameStatus').textContent = 
+                    `${data.playerName} 经过起点获得 $2000！`;
+            }
+            
+            if (data.landAction) {
+                if (data.landAction.type === 'rent') {
+                    addBroadcast(`${data.playerName} 向 ${data.landAction.owner} 支付过路费 $${data.landAction.amount}`, 'rent');
+                    animateRentPayment(data.cell.index, data.landAction.owner, data.landAction.amount);
+                    document.getElementById('gameStatus').textContent = 
+                        `${data.playerName} 向 ${data.landAction.owner} 支付过路费 $${data.landAction.amount}`;
+                } else if (data.landAction.type === 'cannotAfford') {
+                    addBroadcast(`${data.playerName} 资金不足，需要出售资产`, 'jail');
+                    document.getElementById('gameStatus').textContent = `${data.playerName} 资金不足！`;
+                    if (isMyAction) {
+                        showSellModal(data.landAction);
+                    }
+                    return;
+                } else if (data.landAction.type === 'bankrupt') {
+                    addBroadcast(`${data.playerName} 破产了！`, 'jail');
+                    if (isMyAction) {
+                        showBankruptModal();
+                    } else {
+                        currentTurn = data.currentTurn;
+                        updatePlayersPanel();
+                        updateTurnStatus();
+                    }
+                    return;
+                } else if (data.landAction.type === 'tax') {
+                    addBroadcast(`${data.playerName} 缴纳税款 $${data.landAction.amount}`, 'tax');
+                    animateTaxPayment(playerIdx, data.cell.index, data.landAction.amount);
+                    document.getElementById('gameStatus').textContent = 
+                        `${data.playerName} 缴纳税款 $${data.landAction.amount}`;
+                } else if (data.landAction.type === 'chance' && data.chanceCard) {
+                    addBroadcast(`${data.playerName} 抽取机会卡：${data.chanceCard.text}`, 'chance');
+                    
+                    if (isMyAction) {
+                        showChanceCardAnimation(data.chanceCard, () => {
+                            const hasExtraAction = data.landAction.extraAction;
+                            if (hasExtraAction && hasExtraAction.type === 'rent') {
+                                const currentPlayer = players[currentTurn];
+                                if (currentPlayer && currentPlayer.money < hasExtraAction.amount) {
+                                    showSellModal(data.landAction.extraAction);
+                                } else {
+                                    showLandAction(data.cell, { type: 'rent', ...hasExtraAction }, true);
+                                }
+                            } else if (hasExtraAction && hasExtraAction.type === 'cannotAfford') {
+                                showSellModal(hasExtraAction);
+                            } else if (hasExtraAction && hasExtraAction.type === 'bankrupt') {
+                                showBankruptModal();
+                            } else if (data.cell.type === 'property' && !data.cell.owner) {
+                                showLandAction(data.cell, { type: 'canBuy', price: data.cell.price }, true);
+                            } else if (data.cell.type === 'property' && data.cell.owner === playerName && !data.cell.isApartment) {
+                                showLandAction(data.cell, { type: 'canBuild', houses: data.cell.houses, housePrice: data.cell.housePrice }, true);
+                            } else {
+                                showLandAction(data.cell, null, true);
+                            }
+                        });
+                    } else {
+                        document.getElementById('gameStatus').textContent = 
+                            `${data.playerName} 抽取机会卡：${data.chanceCard.text}`;
+                        if (data.landAction.extraAction) {
+                            addBroadcast(`${data.playerName} 需要支付过路费 $${data.landAction.extraAction.amount}`, 'rent');
+                            animateRentPayment(data.cell.index, data.landAction.extraAction.owner, data.landAction.extraAction.amount);
+                        }
+                    }
+                    return;
+                } else if (data.landAction.type === 'jail') {
+                    addBroadcast(`${data.playerName} 进入监狱！下一回合跳过`, 'jail');
+                } else if (data.landAction.type === 'parking') {
+                    addBroadcast(`${data.playerName} 停在免费停车站！`, 'parking');
+                    document.getElementById('gameStatus').textContent = `${data.playerName} 停在免费停车站！`;
+                }
+            }
+            
+            if (isMyAction && data.landAction && data.landAction.type !== 'chance' && data.landAction.type !== 'parking') {
+                setTimeout(() => {
+                    showLandAction(data.cell, data.landAction, true);
+                }, 300);
+            } else if (!data.landAction) {
+                const currentPlayer = players[currentTurn];
+                if (currentPlayer && currentPlayer.name === playerName) {
+                    socket.emit('endTurn', { roomId });
+                }
+                document.getElementById('gameStatus').textContent = 
+                    `${data.playerName} 到达 ${data.cell.name}`;
+            }
+        });
+
+        socket.on('turnSkipped', (data) => {
+            addBroadcast(`${data.playerName} 回合跳过`, '');
+            currentTurn = data.currentTurn;
+            updatePlayersPanel();
+            updateTurnStatus();
+        });
+
+        socket.on('propertyBought', (data) => {
+            document.getElementById('landModal').classList.remove('show');
+            players = data.players;
+            currentTurn = data.currentTurn;
+            updatePlayersPanel();
+            updateTurnStatus();
+            
+            const ownerPlayer = players.find(p => p.name === data.owner);
+            const ownerColor = data.ownerColor || (ownerPlayer ? getPieceColor(ownerPlayer.piece) : '#fff');
+            
+            addBroadcast(`${data.owner} 购买了 ${board[data.position]?.name}，花费 $${board[data.position]?.price}`, 'buy');
+            document.getElementById('gameStatus').textContent = 
+                `${data.owner} 购买了 ${board[data.position]?.name}！`;
+            
+            const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
+            if (cellEl) {
+                cellEl.style.background = ownerColor;
+                cellEl.style.borderColor = ownerColor;
+                cellEl.style.boxShadow = `0 0 15px ${ownerColor}60`;
+            }
+        });
+
+        socket.on('houseBuilt', (data) => {
+            document.getElementById('landModal').classList.remove('show');
+            players = data.players;
+            currentTurn = data.currentTurn;
+            updatePlayersPanel();
+            updateTurnStatus();
+            
+            const player = players.find(p => p.name === data.owner);
+            let message = `${player?.name || '玩家'} 在 ${data.cellName} 建了一座房子`;
+            if (data.isApartment) {
+                message = `${player?.name || '玩家'} 的 ${data.cellName} 升级为高级公寓！`;
+            }
+            
+            addBroadcast(message, 'build');
+            document.getElementById('gameStatus').textContent = message;
+            
+            const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
+            if (cellEl) {
+                const housesEl = cellEl.querySelector('.cell-houses');
+                if (housesEl) housesEl.remove();
+                
+                const newHousesEl = document.createElement('div');
+                newHousesEl.className = 'cell-houses';
+                newHousesEl.style.cssText = 'font-size: 10px; margin-top: 2px;';
+                
+                if (data.isApartment) {
+                    newHousesEl.textContent = '🏢';
+                } else if (data.houses > 0) {
+                    newHousesEl.textContent = '🏠'.repeat(data.houses);
+                }
+                
+                cellEl.appendChild(newHousesEl);
+            }
+        });
+
+        socket.on('turnChanged', (data) => {
+            currentTurn = data.currentTurn;
+            updatePlayersPanel();
+            updateTurnStatus();
+            document.getElementById('landModal').classList.remove('show');
+            document.getElementById('sellModal').classList.remove('show');
+        });
+
+        socket.on('propertySold', (data) => {
+            players = players.map(p => {
+                if (p.name === data.seller) {
+                    return { ...p, money: (p.money || 0) + data.sellPrice };
+                }
+                return p;
+            });
+            updatePlayersPanel();
+            
+            addBroadcast(`${data.seller} 变卖 ${board[data.position]?.name}，获得 $${data.sellPrice}`, 'sell');
+            
+            board = data.board;
+            updateCellDisplay({ index: data.position, owner: null, houses: 0, isApartment: false });
+            
+            const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
+            if (cellEl) {
+                cellEl.style.background = 'rgba(255, 255, 255, 0.15)';
+                cellEl.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+                cellEl.style.boxShadow = 'none';
+            }
+        });
+
+        socket.on('houseSold', (data) => {
+            players = players.map(p => {
+                if (p.name === data.seller) {
+                    return { ...p, money: (p.money || 0) + data.sellPrice };
+                }
+                return p;
+            });
+            updatePlayersPanel();
+            
+            addBroadcast(`${data.seller} 出售 ${board[data.position]?.name} 房屋，获得 $${data.sellPrice}`, 'sell');
+            
+            board = data.board;
+            
+            const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
+            if (cellEl) {
+                const housesEl = cellEl.querySelector('.cell-houses');
+                if (housesEl) housesEl.remove();
+                
+                if (data.isApartment) {
+                    const newHousesEl = document.createElement('div');
+                    newHousesEl.className = 'cell-houses';
+                    newHousesEl.style.cssText = 'font-size: 10px; margin-top: 2px;';
+                    newHousesEl.textContent = '🏠🏠';
+                    cellEl.appendChild(newHousesEl);
+                } else if (data.houses > 0) {
+                    const newHousesEl = document.createElement('div');
+                    newHousesEl.className = 'cell-houses';
+                    newHousesEl.style.cssText = 'font-size: 10px; margin-top: 2px;';
+                    newHousesEl.textContent = '🏠'.repeat(data.houses);
+                    cellEl.appendChild(newHousesEl);
+                }
+            }
+        });
+
+        socket.on('stillCannotAfford', (data) => {
+            players = players.map(p => {
+                return { ...p, money: p.money };
+            });
+            updatePlayersPanel();
+            
+            const isMyAction = data.seller === playerName;
+            if (isMyAction) {
+                showSellModal({
+                    amount: data.amount,
+                    paid: data.paid,
+                    owner: data.owner,
+                    sellableProperties: data.sellableProperties
+                });
+            }
+        });
+
+        socket.on('rentPaid', (data) => {
+            document.getElementById('sellModal').classList.remove('show');
+            players = data.players;
+            currentTurn = data.currentTurn;
+            updatePlayersPanel();
+            updateTurnStatus();
+            
+            addBroadcast(`${data.playerName} 向 ${data.owner} 支付过路费 $${data.amount}`, 'rent');
+            
+            board = data.board;
+            
+            const isMyTurn = players[currentTurn]?.name === playerName;
+            if (isMyTurn) {
+                socket.emit('endTurn', { roomId });
+            }
+        });
+
+        socket.on('playerBankrupt', (data) => {
+            board = data.board;
+            
+            data.board.forEach((cell, idx) => {
+                if (!cell.owner) {
+                    const cellEl = document.querySelector(`.cell[data-index="${idx}"]`);
+                    if (cellEl) {
+                        cellEl.style.background = 'rgba(255, 255, 255, 0.15)';
+                        cellEl.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+                        cellEl.style.boxShadow = 'none';
+                        const housesEl = cellEl.querySelector('.cell-houses');
+                        if (housesEl) housesEl.remove();
+                    }
+                }
+            });
+            
+            addBroadcast(`${data.playerName} 破产了！`, 'jail');
+            
+            const bankruptIdx = players.findIndex(p => p.name === data.playerName);
+            if (bankruptIdx >= 0) {
+                const marker = document.getElementById(`marker-${bankruptIdx}`);
+                if (marker) marker.remove();
+            }
+        });
+
+        socket.on('gameWinner', (data) => {
+            addBroadcast(`🏆 游戏结束！${data.winner} 获胜！`, 'win');
+            document.getElementById('gameStatus').textContent = `🏆 ${data.winner} 获胜！`;
+            document.getElementById('rollBtn').style.display = 'none';
+            
+            alert(`🎉 恭喜 ${data.winner} 获得游戏胜利！`);
+        });
+
+        socket.on('error', (data) => {
+            alert(data.message);
+        });
+
+        document.getElementById('startBtn').addEventListener('click', () => {
+            const room = new URLSearchParams(window.location.search).get('room');
+            socket.emit('startMonopolySelection', { roomId: room });
+        });
+
+        document.getElementById('confirmPiece').addEventListener('click', () => {
+            if (selectedPiece) {
+                const room = new URLSearchParams(window.location.search).get('room');
+                socket.emit('selectMonopolyPiece', { roomId: room, piece: selectedPiece });
+                myPiece = selectedPiece;
+                myColor = getPieceColor(selectedPiece);
+                document.getElementById('confirmPiece').disabled = true;
+                document.getElementById('confirmPiece').textContent = '已选择';
+            }
+        });
+
+        document.getElementById('rollBtn').addEventListener('click', () => {
+            const room = new URLSearchParams(window.location.search).get('room');
+            socket.emit('rollDice', { roomId: room });
+        });
+
+        document.getElementById('exitBtn').addEventListener('click', () => {
+            if (confirm('确定要退出游戏吗？')) {
+                const room = new URLSearchParams(window.location.search).get('room');
+                if (room) {
+                    socket.emit('leaveMonopolyRoom', { roomId: room });
+                }
+                window.close();
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 100);
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            const room = new URLSearchParams(window.location.search).get('room');
+            if (room) {
+                socket.emit('leaveMonopolyRoom', { roomId: room });
+            }
+        });
+    </script>
+</body>
+</html>
