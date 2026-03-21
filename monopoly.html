@@ -353,6 +353,49 @@
             border-radius: 10px;
         }
 
+        .waiting-player .robot-badge {
+            background: #9b59b6;
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        .waiting-player .remove-robot {
+            background: #e74c3c;
+            color: #fff;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            margin-left: 5px;
+        }
+
+        .waiting-player .remove-robot:hover {
+            background: #c0392b;
+        }
+
+        .robot-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .add-robot-btn {
+            padding: 10px 20px;
+            font-size: 14px;
+            color: #fff;
+            background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .add-robot-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(155, 89, 182, 0.5); }
+        .add-robot-btn:disabled { background: #555; cursor: not-allowed; box-shadow: none; }
+
         .start-btn {
             padding: 15px 50px;
             font-size: 20px;
@@ -1167,6 +1210,94 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
+
+        .result-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .result-modal.show {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .result-content {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 40px 60px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: scaleIn 0.3s ease;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .result-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+        }
+
+        .result-title {
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #ffd700;
+        }
+
+        .result-desc {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+
+        .result-btn {
+            padding: 14px 50px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .result-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .celebration-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 150;
+            overflow: hidden;
+        }
+
+        .celebration-particle {
+            position: absolute;
+            font-size: 24px;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
@@ -1206,6 +1337,9 @@
     <div class="overlay" id="waitingOverlay">
         <div class="overlay-title">大富翁</div>
         <div class="overlay-subtitle">等待玩家加入...</div>
+        <div class="robot-controls" id="robotControls" style="display: none;">
+            <button class="add-robot-btn" id="addRobotBtn">添加机器人</button>
+        </div>
         <div class="waiting-players" id="waitingPlayers"></div>
         <button class="start-btn" id="startBtn">开始游戏 (1/5)</button>
     </div>
@@ -1270,6 +1404,15 @@
             <div class="bankrupt-buttons">
                 <button class="bankrupt-btn" id="confirmBankruptBtn">确认</button>
             </div>
+        </div>
+    </div>
+
+    <div class="result-modal" id="resultModal">
+        <div class="result-content">
+            <div class="result-icon" id="resultIcon">🏆</div>
+            <div class="result-title" id="resultTitle">游戏结束</div>
+            <div class="result-desc" id="resultDesc"></div>
+            <button class="result-btn" id="resultBtn">确定</button>
         </div>
     </div>
 
@@ -1635,7 +1778,7 @@
                 
                 card.innerHTML = `
                     <div class="player-piece ${isMyTurn ? 'turn' : ''}" style="color: ${color}; border-color: ${color}; text-shadow: 0 0 10px ${color};">${player.piece || '❓'}</div>
-                    <div class="player-name" style="color: ${color}">${player.name}${player.isHost ? ' (房主)' : ''}</div>
+                    <div class="player-name" style="color: ${color}">${player.name}${player.isHost ? ' (房主)' : ''}${player.isRobot ? ' 🤖' : ''}</div>
                     ${turnBadge}
                     <div class="player-money">${player.money}</div>
                 `;
@@ -1648,15 +1791,41 @@
             const container = document.getElementById('waitingPlayers');
             container.innerHTML = '';
             
-            players.forEach(player => {
+            players.forEach((player, index) => {
                 const div = document.createElement('div');
                 div.className = 'waiting-player';
+                let badges = '';
+                if (player.isHost) {
+                    badges += '<span class="host-badge">房主</span>';
+                }
+                if (player.isRobot) {
+                    badges += '<span class="robot-badge">机器人</span>';
+                }
+                if (player.isRobot && isHost) {
+                    badges += `<button class="remove-robot" data-index="${index}">移除</button>`;
+                }
                 div.innerHTML = `
                     <span class="name">${player.name}</span>
-                    ${player.isHost ? '<span class="host-badge">房主</span>' : ''}
+                    ${badges}
                 `;
                 container.appendChild(div);
             });
+
+            document.querySelectorAll('.remove-robot').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const idx = parseInt(e.target.dataset.index);
+                    const room = new URLSearchParams(window.location.search).get('room');
+                    socket.emit('removeRobot', { roomId: room, playerIndex: idx });
+                });
+            });
+            
+            const robotControls = document.getElementById('robotControls');
+            const addRobotBtn = document.getElementById('addRobotBtn');
+            const robotCount = players.filter(p => p.isRobot).length;
+            const humanCount = players.filter(p => !p.isRobot).length;
+            
+            robotControls.style.display = isHost ? 'flex' : 'none';
+            addRobotBtn.disabled = players.length >= 5;
             
             const startBtn = document.getElementById('startBtn');
             startBtn.textContent = `开始游戏 (${players.length}/5)`;
@@ -1874,6 +2043,107 @@
                 modal.classList.remove('show');
                 socket.emit('confirmBankrupt', { roomId });
             };
+        }
+
+        function showWinResult(winner) {
+            const modal = document.getElementById('resultModal');
+            const iconEl = document.getElementById('resultIcon');
+            const titleEl = document.getElementById('resultTitle');
+            const descEl = document.getElementById('resultDesc');
+            
+            const isMeWinner = winner === playerName;
+            
+            if (isMeWinner) {
+                iconEl.textContent = '🏆';
+                titleEl.textContent = '恭喜你获胜！';
+                titleEl.style.color = '#ffd700';
+                descEl.textContent = '你成为了最终的胜利者！';
+                celebrateWin();
+            } else {
+                iconEl.textContent = '😢';
+                titleEl.textContent = '游戏结束';
+                titleEl.style.color = '#f87171';
+                descEl.textContent = `${winner} 获得了胜利`;
+            }
+            
+            setTimeout(() => {
+                modal.classList.add('show');
+            }, 500);
+        }
+
+        function celebrateWin() {
+            const container = document.createElement('div');
+            container.className = 'celebration-container';
+            document.body.appendChild(container);
+
+            const emojis = ['🎉', '🎊', '🏆', '🥇', '✨', '🌟', '💫', '🎇', '🎆', '🎈', '🙌', '👏', '🥳', '💰', '💵'];
+            const particleCount = 60;
+            const duration = 3000;
+
+            function createParticle() {
+                const particle = document.createElement('div');
+                particle.className = 'celebration-particle';
+                particle.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+
+                const startX = window.innerWidth / 2;
+                const startY = window.innerHeight + 50;
+
+                const angle = (Math.random() * 120 - 60) * (Math.PI / 180);
+                const velocity = 300 + Math.random() * 400;
+                const vx = Math.sin(angle) * velocity;
+                const vy = -Math.cos(angle) * velocity;
+
+                const rotationSpeed = (Math.random() - 0.5) * 720;
+                const gravity = 600;
+                const lifeTime = 2000 + Math.random() * 1500;
+
+                particle.style.left = startX + 'px';
+                particle.style.top = startY + 'px';
+                particle.style.fontSize = (20 + Math.random() * 20) + 'px';
+
+                container.appendChild(particle);
+
+                let x = startX;
+                let y = startY;
+                let rotation = 0;
+                let particleStartTime = Date.now();
+
+                function animate() {
+                    const elapsed = (Date.now() - particleStartTime) / 1000;
+
+                    x = startX + vx * elapsed;
+                    y = startY + vy * elapsed + 0.5 * gravity * elapsed * elapsed;
+                    rotation += rotationSpeed * 0.016;
+
+                    particle.style.left = x + 'px';
+                    particle.style.top = y + 'px';
+                    particle.style.transform = `translate(-50%, -50%) rotate(${rotation}deg)`;
+                    particle.style.opacity = Math.max(0, 1 - elapsed / 3);
+
+                    if (Date.now() - particleStartTime < lifeTime) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        particle.remove();
+                    }
+                }
+
+                requestAnimationFrame(animate);
+            }
+
+            const interval = duration / particleCount;
+            let created = 0;
+
+            const createInterval = setInterval(() => {
+                createParticle();
+                created++;
+                if (created >= particleCount) {
+                    clearInterval(createInterval);
+                }
+            }, interval);
+
+            setTimeout(() => {
+                container.remove();
+            }, duration + 4000);
         }
 
         function updateTurnStatus() {
@@ -2429,16 +2699,18 @@
         });
 
         socket.on('turnSkipped', (data) => {
-            addBroadcast(`${data.playerName} 回合跳过`, '');
-            currentTurn = data.currentTurn;
-            updatePlayersPanel();
-            updateTurnStatus();
+            addBroadcast(`${data.playerName} 在监狱中，回合跳过`, 'jail');
         });
 
         socket.on('propertyBought', (data) => {
             document.getElementById('landModal').classList.remove('show');
             players = data.players;
             currentTurn = data.currentTurn;
+            
+            if (data.board) {
+                board = data.board;
+            }
+            
             updatePlayersPanel();
             updateTurnStatus();
             
@@ -2461,6 +2733,11 @@
             document.getElementById('landModal').classList.remove('show');
             players = data.players;
             currentTurn = data.currentTurn;
+            
+            if (data.board) {
+                board = data.board;
+            }
+            
             updatePlayersPanel();
             updateTurnStatus();
             
@@ -2620,7 +2897,7 @@
             document.getElementById('gameStatus').textContent = `🏆 ${data.winner} 获胜！`;
             document.getElementById('rollBtn').style.display = 'none';
             
-            alert(`🎉 恭喜 ${data.winner} 获得游戏胜利！`);
+            showWinResult(data.winner);
         });
 
         socket.on('error', (data) => {
@@ -2630,6 +2907,21 @@
         document.getElementById('startBtn').addEventListener('click', () => {
             const room = new URLSearchParams(window.location.search).get('room');
             socket.emit('startMonopolySelection', { roomId: room });
+        });
+
+        document.getElementById('addRobotBtn').addEventListener('click', () => {
+            const room = new URLSearchParams(window.location.search).get('room');
+            socket.emit('addRobot', { roomId: room });
+        });
+
+        socket.on('robotAdded', (data) => {
+            players = data.players;
+            updateWaitingPlayers();
+        });
+
+        socket.on('robotRemoved', (data) => {
+            players = data.players;
+            updateWaitingPlayers();
         });
 
         document.getElementById('confirmPiece').addEventListener('click', () => {
@@ -2646,6 +2938,18 @@
         document.getElementById('rollBtn').addEventListener('click', () => {
             const room = new URLSearchParams(window.location.search).get('room');
             socket.emit('rollDice', { roomId: room });
+        });
+
+        document.getElementById('resultBtn').addEventListener('click', () => {
+            document.getElementById('resultModal').classList.remove('show');
+            const room = new URLSearchParams(window.location.search).get('room');
+            if (room) {
+                socket.emit('leaveMonopolyRoom', { roomId: room });
+            }
+            window.close();
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 100);
         });
 
         document.getElementById('exitBtn').addEventListener('click', () => {

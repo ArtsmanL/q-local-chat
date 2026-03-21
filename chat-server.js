@@ -91,6 +91,360 @@ const CHANCE_CARDS = [
     { text: '超速罚单，支出$500', money: -500 }
 ];
 
+function startMonopolyGame(roomId, room) {
+    io.to(roomId).emit('allPiecesSelected', {
+        countdown: 3
+    });
+
+    let countdown = 3;
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        if (countdown > 0) {
+            io.to(roomId).emit('gameCountdown', { countdown });
+        } else {
+            clearInterval(countdownInterval);
+            
+            room.started = true;
+            room.currentTurn = 0;
+
+            io.to(roomId).emit('monopolyGameStarted', {
+                board: room.board,
+                players: room.players.map(p => ({ 
+                    name: p.name, 
+                    money: p.money, 
+                    position: p.position, 
+                    piece: p.piece,
+                    isHost: p.isHost,
+                    isRobot: p.isRobot
+                })),
+                currentTurn: 0
+            });
+
+            console.log('大富翁游戏开始:', roomId);
+
+            const firstPlayer = room.players[0];
+            console.log(`第一个玩家: ${firstPlayer?.name}, isRobot: ${firstPlayer?.isRobot}`);
+            if (firstPlayer && firstPlayer.isRobot) {
+                console.log('第一个玩家是机器人，触发机器人回合');
+                setTimeout(() => handleRobotTurn(roomId), 1500);
+            }
+        }
+    }, 1000);
+}
+
+function handleRobotTurn(roomId) {
+    const room = monopolyRooms.get(roomId);
+    if (!room || !room.started) {
+        console.log('handleRobotTurn: 房间不存在或游戏未开始');
+        return;
+    }
+
+    const player = room.players[room.currentTurn];
+    console.log(`handleRobotTurn: 当前玩家 ${player?.name}, isRobot: ${player?.isRobot}, currentTurn: ${room.currentTurn}`);
+    if (!player || !player.isRobot || player.bankrupt) {
+        console.log('handleRobotTurn: 玩家不是机器人或已破产');
+        return;
+    }
+
+    setTimeout(() => {
+        const room = monopolyRooms.get(roomId);
+        if (!room || !room.started) return;
+        
+        const player = room.players[room.currentTurn];
+        if (!player || !player.isRobot || player.bankrupt) return;
+
+        if (player.skipTurn) {
+            player.skipTurn = false;
+            
+            io.to(roomId).emit('turnSkipped', {
+                playerName: player.name
+            });
+            
+            setTimeout(() => {
+                const room = monopolyRooms.get(roomId);
+                if (!room) return;
+                
+                let nextTurn = room.currentTurn;
+                let attempts = 0;
+                
+                do {
+                    nextTurn = (nextTurn + 1) % room.players.length;
+                    attempts++;
+                } while (room.players[nextTurn].bankrupt && attempts < room.players.length);
+                
+                room.currentTurn = nextTurn;
+                const nextPlayer = room.players[nextTurn];
+                
+                io.to(roomId).emit('turnChanged', {
+                    currentTurn: nextTurn,
+                    currentPlayer: nextPlayer.name
+                });
+                
+                if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+                    setTimeout(() => handleRobotTurn(roomId), 1000);
+                }
+            }, 500);
+            return;
+        }
+
+        const dice = Math.floor(Math.random() * 6) + 1;
+        const oldPosition = player.position;
+        player.position = (player.position + dice) % 40;
+
+        const passedStart = oldPosition > player.position && player.position !== 0;
+        if (passedStart) {
+            player.money += 2000;
+        }
+
+        const cell = room.board[player.position];
+        let landAction = null;
+        let chanceCard = null;
+
+        if (cell.type === 'property') {
+            if (cell.owner && cell.owner !== player.name) {
+                const owner = room.players.find(p => p.name === cell.owner);
+                let rentAmount;
+                if (cell.isApartment) {
+                    rentAmount = cell.rentApartment;
+                } else if (cell.houses === 2) {
+                    rentAmount = cell.rent2;
+                } else if (cell.houses === 1) {
+                    rentAmount = cell.rent1;
+                } else {
+                    rentAmount = cell.rentBase;
+                }
+                
+                if (player.money >= rentAmount) {
+                    player.money -= rentAmount;
+                    if (owner) {
+                        owner.money += rentAmount;
+                    }
+                    landAction = { type: 'rent', amount: rentAmount, owner: cell.owner, ownerPiece: owner?.piece };
+                } else {
+                    player.bankrupt = true;
+                    
+                    room.board.forEach(c => {
+                        if (c.owner === player.name) {
+                            c.owner = null;
+                            c.houses = 0;
+                            c.isApartment = false;
+                        }
+                    });
+                    
+                    landAction = { type: 'bankrupt', amount: rentAmount };
+                }
+            } else if (!cell.owner) {
+                if (player.money >= cell.price) {
+                    player.money -= cell.price;
+                    cell.owner = player.name;
+                    landAction = { type: 'canBuy', price: cell.price, bought: true };
+                    console.log(`机器人 ${player.name} 购买了 ${cell.name}，花费 $${cell.price}`);
+                } else {
+                    landAction = { type: 'canBuy', price: cell.price };
+                    console.log(`机器人 ${player.name} 资金不足，无法购买 ${cell.name}`);
+                }
+            } else if (cell.owner === player.name && !cell.isApartment) {
+                landAction = { type: 'canBuild', houses: cell.houses, housePrice: cell.housePrice };
+                if (player.money >= cell.housePrice) {
+                    player.money -= cell.housePrice;
+                    cell.houses++;
+                    if (cell.houses >= 3) {
+                        cell.isApartment = true;
+                    }
+                    landAction = { type: 'canBuild', houses: cell.houses, housePrice: cell.housePrice, built: true };
+                    console.log(`机器人 ${player.name} 在 ${cell.name} 建房，花费 $${cell.housePrice}`);
+                }
+            }
+        } else if (cell.type === 'tax') {
+            if (player.money >= cell.price) {
+                player.money -= cell.price;
+                landAction = { type: 'tax', amount: cell.price };
+            } else {
+                player.bankrupt = true;
+                room.board.forEach(c => {
+                    if (c.owner === player.name) {
+                        c.owner = null;
+                        c.houses = 0;
+                        c.isApartment = false;
+                    }
+                });
+                landAction = { type: 'bankrupt', amount: cell.price };
+            }
+        } else if (cell.type === 'jail') {
+            player.skipTurn = true;
+            landAction = { type: 'jail' };
+        } else if (cell.type === 'chance') {
+            chanceCard = CHANCE_CARDS[Math.floor(Math.random() * CHANCE_CARDS.length)];
+            
+            if (chanceCard.money) {
+                player.money += chanceCard.money;
+            }
+            if (chanceCard.steps) {
+                const oldPos = player.position;
+                player.position = (player.position + chanceCard.steps + 40) % 40;
+                
+                if (chanceCard.steps > 0 && oldPos > player.position) {
+                    player.money += 2000;
+                } else if (chanceCard.steps < 0 && oldPos < player.position) {
+                    player.money += 2000;
+                }
+            }
+            
+            landAction = { type: 'chance', card: chanceCard };
+        }
+
+        const finalCell = room.board[player.position];
+
+        io.to(roomId).emit('diceRolled', {
+            playerName: player.name,
+            dice,
+            oldPosition,
+            newPosition: player.position,
+            passedStart,
+            landAction,
+            chanceCard,
+            cell: {
+                index: finalCell.index,
+                type: finalCell.type,
+                name: finalCell.name,
+                desc: finalCell.desc,
+                price: finalCell.price,
+                housePrice: finalCell.housePrice,
+                rentBase: finalCell.rentBase,
+                rent1: finalCell.rent1,
+                rent2: finalCell.rent2,
+                rentApartment: finalCell.rentApartment,
+                owner: finalCell.owner,
+                houses: finalCell.houses,
+                isApartment: finalCell.isApartment
+            },
+            players: room.players.map(p => ({ 
+                name: p.name, 
+                money: p.money, 
+                position: p.position, 
+                piece: p.piece 
+            })),
+            currentTurn: room.currentTurn
+        });
+
+        const animationDelay = 500 + dice * 200 + 300;
+        
+        if (landAction?.bought) {
+            setTimeout(() => {
+                const room = monopolyRooms.get(roomId);
+                if (!room) return;
+                
+                const colorIndex = PIECES.indexOf(player.piece);
+                const playerColor = colorIndex >= 0 ? PIECE_COLORS[colorIndex] : '#fff';
+                
+                io.to(roomId).emit('propertyBought', {
+                    position: player.position,
+                    owner: player.name,
+                    ownerPiece: player.piece,
+                    ownerColor: playerColor,
+                    players: room.players.map(p => ({ 
+                        name: p.name, 
+                        money: p.money,
+                        piece: p.piece
+                    })),
+                    board: room.board.map(c => ({
+                        index: c.index,
+                        owner: c.owner,
+                        houses: c.houses,
+                        isApartment: c.isApartment
+                    })),
+                    currentTurn: room.currentTurn,
+                    currentPlayer: player.name
+                });
+            }, animationDelay);
+        }
+
+        if (landAction?.built) {
+            setTimeout(() => {
+                const room = monopolyRooms.get(roomId);
+                if (!room) return;
+                
+                io.to(roomId).emit('houseBuilt', {
+                    position: player.position,
+                    owner: player.name,
+                    cellName: cell.name,
+                    houses: cell.houses,
+                    isApartment: cell.isApartment,
+                    players: room.players.map(p => ({ 
+                        name: p.name, 
+                        money: p.money,
+                        piece: p.piece
+                    })),
+                    board: room.board.map(c => ({
+                        index: c.index,
+                        owner: c.owner,
+                        houses: c.houses,
+                        isApartment: c.isApartment
+                    })),
+                    currentTurn: room.currentTurn,
+                    currentPlayer: player.name
+                });
+            }, animationDelay);
+        }
+
+        const totalDelay = Math.max(animationDelay + 1500, 2500);
+        console.log(`机器人 ${player.name} 回合结束，准备下一个玩家`);
+        setTimeout(() => nextRobotTurn(roomId), totalDelay);
+    }, 800);
+}
+
+function nextRobotTurn(roomId) {
+    const room = monopolyRooms.get(roomId);
+    if (!room || !room.started) return;
+
+    let nextTurn = room.currentTurn;
+    let attempts = 0;
+    
+    do {
+        nextTurn = (nextTurn + 1) % room.players.length;
+        attempts++;
+    } while (room.players[nextTurn].bankrupt && attempts < room.players.length);
+
+    const activePlayers = room.players.filter(p => !p.bankrupt);
+    if (activePlayers.length <= 1) {
+        const winner = activePlayers[0];
+        if (winner) {
+            announceMonopolyWinner(roomId, winner.name);
+        }
+        return;
+    }
+
+    room.currentTurn = nextTurn;
+    
+    const nextPlayer = room.players[nextTurn];
+    console.log(`nextRobotTurn: 下一个玩家 ${nextPlayer.name}, isRobot: ${nextPlayer.isRobot}`);
+    
+    io.to(roomId).emit('turnChanged', {
+        currentTurn: nextTurn,
+        currentPlayer: nextPlayer.name
+    });
+
+    if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+        console.log(`触发机器人 ${nextPlayer.name} 的回合`);
+        setTimeout(() => handleRobotTurn(roomId), 1000);
+    }
+}
+
+function announceMonopolyWinner(roomId, winnerName) {
+    io.to(roomId).emit('gameWinner', { winner: winnerName });
+    
+    io.emit('message', {
+        username: '🎮 大富翁',
+        ip: 'system',
+        text: `🏆 恭喜 ${winnerName} 在大富翁游戏中获胜！`,
+        type: 'text',
+        time: new Date().toLocaleTimeString(),
+        id: Date.now() + '_monopoly_winner'
+    });
+    
+    monopolyRooms.delete(roomId);
+}
+
 const APP_VERSION = '1.7.0';
 const CHANGELOG = [
     {
@@ -1881,6 +2235,104 @@ io.on('connection', (socket) => {
         console.log('大富翁玩家加入:', user.username, roomId);
     });
 
+    socket.on('addRobot', (data) => {
+        const { roomId } = data;
+        const room = monopolyRooms.get(roomId);
+        if (!room) return;
+
+        if (room.host !== socket.id) {
+            socket.emit('error', { message: '只有房主可以添加机器人' });
+            return;
+        }
+
+        if (room.players.length >= 5) {
+            socket.emit('error', { message: '房间已满' });
+            return;
+        }
+
+        const robotNames = ['机器人小爱', '机器人小贝', '机器人小智', '机器人小慧'];
+        const existingNames = room.players.map(p => p.name);
+        const availableNames = robotNames.filter(n => !existingNames.includes(n));
+        
+        if (availableNames.length === 0) {
+            socket.emit('error', { message: '没有可用的机器人' });
+            return;
+        }
+
+        const robotName = availableNames[0];
+        const robotId = 'robot_' + Date.now();
+
+        room.players.push({
+            socketId: robotId,
+            name: robotName,
+            ip: '127.0.0.1',
+            money: 15000,
+            position: 0,
+            piece: null,
+            isHost: false,
+            ready: false,
+            skipTurn: false,
+            bankrupt: false,
+            pendingPayment: null,
+            pendingOwner: null,
+            paidAmount: 0,
+            isRobot: true
+        });
+
+        io.to(roomId).emit('robotAdded', {
+            players: room.players.map(p => ({ 
+                name: p.name, 
+                money: p.money, 
+                isHost: p.isHost, 
+                ready: p.ready,
+                isRobot: p.isRobot 
+            }))
+        });
+
+        io.emit('monopolyRoomUpdate', {
+            roomId,
+            playerCount: room.players.length
+        });
+
+        console.log('大富翁机器人加入:', robotName, roomId);
+    });
+
+    socket.on('removeRobot', (data) => {
+        const { roomId, playerIndex } = data;
+        const room = monopolyRooms.get(roomId);
+        if (!room) return;
+
+        if (room.host !== socket.id) {
+            socket.emit('error', { message: '只有房主可以移除机器人' });
+            return;
+        }
+
+        const player = room.players[playerIndex];
+        if (!player || !player.isRobot) {
+            socket.emit('error', { message: '无法移除该玩家' });
+            return;
+        }
+
+        room.players.splice(playerIndex, 1);
+
+        io.to(roomId).emit('robotRemoved', {
+            players: room.players.map(p => ({ 
+                name: p.name, 
+                money: p.money, 
+                isHost: p.isHost, 
+                ready: p.ready,
+                isRobot: p.isRobot 
+            }))
+        });
+
+        io.emit('monopolyRoomUpdate', {
+            roomId,
+            playerCount: room.players.length
+        });
+
+        console.log('大富翁机器人移除:', player.name, roomId);
+    });
+
     socket.on('startMonopolySelection', (data) => {
         const { roomId } = data;
         const room = monopolyRooms.get(roomId);
@@ -1898,11 +2350,34 @@ io.on('connection', (socket) => {
 
         room.phase = 'selection';
 
+        const robots = room.players.filter(p => p.isRobot);
+        const usedPieces = room.players.filter(p => p.piece).map(p => p.piece);
+        
+        robots.forEach(robot => {
+            const availablePiece = PIECES.find(p => !usedPieces.includes(p));
+            if (availablePiece) {
+                robot.piece = availablePiece;
+                robot.ready = true;
+                usedPieces.push(availablePiece);
+            }
+        });
+
         io.to(roomId).emit('monopolySelectionStarted', {
-            players: room.players.map(p => ({ name: p.name, money: p.money, isHost: p.isHost }))
+            players: room.players.map(p => ({ 
+                name: p.name, 
+                money: p.money, 
+                isHost: p.isHost,
+                piece: p.piece,
+                isRobot: p.isRobot
+            }))
         });
 
         io.emit('monopolyRoomStarted', { roomId });
+
+        const allReady = room.players.every(p => p.piece);
+        if (allReady) {
+            startMonopolyGame(roomId, room);
+        }
 
         console.log('大富翁开始选择棋子:', roomId);
     });
@@ -1927,41 +2402,12 @@ io.on('connection', (socket) => {
         io.to(roomId).emit('playerPieceSelected', {
             playerName: player.name,
             piece: piece,
-            players: room.players.map(p => ({ name: p.name, money: p.money, piece: p.piece, isHost: p.isHost, ready: p.ready }))
+            players: room.players.map(p => ({ name: p.name, money: p.money, piece: p.piece, isHost: p.isHost, ready: p.ready, isRobot: p.isRobot }))
         });
 
         const allReady = room.players.every(p => p.piece);
         if (allReady) {
-            io.to(roomId).emit('allPiecesSelected', {
-                countdown: 3
-            });
-
-            let countdown = 3;
-            const countdownInterval = setInterval(() => {
-                countdown--;
-                if (countdown > 0) {
-                    io.to(roomId).emit('gameCountdown', { countdown });
-                } else {
-                    clearInterval(countdownInterval);
-                    
-                    room.started = true;
-                    room.currentTurn = 0;
-
-                    io.to(roomId).emit('monopolyGameStarted', {
-                        board: room.board,
-                        players: room.players.map(p => ({ 
-                            name: p.name, 
-                            money: p.money, 
-                            position: p.position, 
-                            piece: p.piece,
-                            isHost: p.isHost 
-                        })),
-                        currentTurn: 0
-                    });
-
-                    console.log('大富翁游戏开始:', roomId);
-                }
-            }, 1000);
+            startMonopolyGame(roomId, room);
         }
     });
 
@@ -1998,6 +2444,10 @@ io.on('connection', (socket) => {
         if (player.skipTurn) {
             player.skipTurn = false;
             
+            io.to(roomId).emit('turnSkipped', {
+                playerName: player.name
+            });
+            
             let nextTurn = (room.currentTurn + 1) % room.players.length;
             let attempts = 0;
             
@@ -2007,11 +2457,16 @@ io.on('connection', (socket) => {
             }
             
             room.currentTurn = nextTurn;
-            io.to(roomId).emit('turnSkipped', {
-                playerName: player.name,
-                currentTurn: room.currentTurn,
-                currentPlayer: room.players[room.currentTurn].name
+            const nextPlayer = room.players[nextTurn];
+            
+            io.to(roomId).emit('turnChanged', {
+                currentTurn: nextTurn,
+                currentPlayer: nextPlayer.name
             });
+
+            if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+                setTimeout(() => handleRobotTurn(roomId), 1000);
+            }
             return;
         }
 
@@ -2253,7 +2708,15 @@ io.on('connection', (socket) => {
         const colorIndex = PIECES.indexOf(player.piece);
         const playerColor = colorIndex >= 0 ? PIECE_COLORS[colorIndex] : '#fff';
 
-        room.currentTurn = (room.currentTurn + 1) % room.players.length;
+        let nextTurn = (room.currentTurn + 1) % room.players.length;
+        let attempts = 0;
+        while (room.players[nextTurn].bankrupt && attempts < room.players.length) {
+            nextTurn = (nextTurn + 1) % room.players.length;
+            attempts++;
+        }
+        room.currentTurn = nextTurn;
+
+        const nextPlayer = room.players[nextTurn];
 
         io.to(roomId).emit('propertyBought', {
             position,
@@ -2262,7 +2725,8 @@ io.on('connection', (socket) => {
             ownerColor: playerColor,
             players: room.players.map(p => ({ 
                 name: p.name, 
-                money: p.money 
+                money: p.money,
+                piece: p.piece
             })),
             board: room.board.map(c => ({
                 index: c.index,
@@ -2271,8 +2735,13 @@ io.on('connection', (socket) => {
                 isApartment: c.isApartment
             })),
             currentTurn: room.currentTurn,
-            currentPlayer: room.players[room.currentTurn].name
+            currentPlayer: nextPlayer.name
         });
+
+        if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+            console.log(`buyProperty: 触发机器人 ${nextPlayer.name} 的回合`);
+            setTimeout(() => handleRobotTurn(roomId), 1000);
+        }
     });
 
     socket.on('buildHouse', (data) => {
@@ -2301,7 +2770,15 @@ io.on('connection', (socket) => {
             cell.houses = 0;
         }
 
-        room.currentTurn = (room.currentTurn + 1) % room.players.length;
+        let nextTurn = (room.currentTurn + 1) % room.players.length;
+        let attempts = 0;
+        while (room.players[nextTurn].bankrupt && attempts < room.players.length) {
+            nextTurn = (nextTurn + 1) % room.players.length;
+            attempts++;
+        }
+        room.currentTurn = nextTurn;
+
+        const nextPlayer = room.players[nextTurn];
 
         io.to(roomId).emit('houseBuilt', {
             position,
@@ -2311,7 +2788,8 @@ io.on('connection', (socket) => {
             owner: player.name,
             players: room.players.map(p => ({ 
                 name: p.name, 
-                money: p.money 
+                money: p.money,
+                piece: p.piece
             })),
             board: room.board.map(c => ({
                 index: c.index,
@@ -2320,8 +2798,13 @@ io.on('connection', (socket) => {
                 isApartment: c.isApartment
             })),
             currentTurn: room.currentTurn,
-            currentPlayer: room.players[room.currentTurn].name
+            currentPlayer: nextPlayer.name
         });
+
+        if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+            console.log(`buildHouse: 触发机器人 ${nextPlayer.name} 的回合`);
+            setTimeout(() => handleRobotTurn(roomId), 1000);
+        }
     });
 
     socket.on('skipAction', (data) => {
@@ -2338,11 +2821,17 @@ io.on('connection', (socket) => {
         }
         
         room.currentTurn = nextTurn;
+        const nextPlayer = room.players[nextTurn];
         
         io.to(roomId).emit('turnChanged', {
             currentTurn: room.currentTurn,
-            currentPlayer: room.players[room.currentTurn].name
+            currentPlayer: nextPlayer.name
         });
+
+        if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+            console.log(`skipAction: 触发机器人 ${nextPlayer.name} 的回合`);
+            setTimeout(() => handleRobotTurn(roomId), 1000);
+        }
     });
 
     socket.on('endTurn', (data) => {
@@ -2350,12 +2839,59 @@ io.on('connection', (socket) => {
         const room = monopolyRooms.get(roomId);
         if (!room || !room.started) return;
 
-        let nextTurn = (room.currentTurn + 1) % room.players.length;
+        console.log(`endTurn: 当前回合 ${room.currentTurn}, 玩家 ${room.players[room.currentTurn]?.name}`);
+
+        const activePlayers = room.players.filter(p => !p.bankrupt);
+        if (activePlayers.length <= 1) {
+            const winner = activePlayers[0];
+            if (winner) {
+                announceMonopolyWinner(roomId, winner.name);
+            }
+            return;
+        }
+
+        let nextTurn = room.currentTurn;
         let attempts = 0;
         
-        while (room.players[nextTurn].bankrupt && attempts < room.players.length) {
+        do {
             nextTurn = (nextTurn + 1) % room.players.length;
             attempts++;
+        } while (room.players[nextTurn].bankrupt && attempts < room.players.length);
+
+        const nextPlayer = room.players[nextTurn];
+        console.log(`endTurn: 下一个玩家索引 ${nextTurn}, 名字 ${nextPlayer?.name}, isRobot ${nextPlayer?.isRobot}`);
+        
+        if (nextPlayer.skipTurn) {
+            nextPlayer.skipTurn = false;
+            
+            io.to(roomId).emit('turnSkipped', { 
+                playerName: nextPlayer.name
+            });
+            
+            setTimeout(() => {
+                const room = monopolyRooms.get(roomId);
+                if (!room) return;
+                
+                let skipNextTurn = (nextTurn + 1) % room.players.length;
+                let attempts = 0;
+                while (room.players[skipNextTurn].bankrupt && attempts < room.players.length) {
+                    skipNextTurn = (skipNextTurn + 1) % room.players.length;
+                    attempts++;
+                }
+                
+                room.currentTurn = skipNextTurn;
+                const skipNextPlayer = room.players[skipNextTurn];
+                
+                io.to(roomId).emit('turnChanged', {
+                    currentTurn: skipNextTurn,
+                    currentPlayer: skipNextPlayer.name
+                });
+                
+                if (skipNextPlayer.isRobot && !skipNextPlayer.bankrupt) {
+                    setTimeout(() => handleRobotTurn(roomId), 1000);
+                }
+            }, 1000);
+            return;
         }
         
         room.currentTurn = nextTurn;
@@ -2364,6 +2900,11 @@ io.on('connection', (socket) => {
             currentTurn: room.currentTurn,
             currentPlayer: room.players[room.currentTurn].name
         });
+
+        if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+            console.log(`endTurn: 触发机器人 ${nextPlayer.name} 的回合`);
+            setTimeout(() => handleRobotTurn(roomId), 1000);
+        }
     });
 
     socket.on('sellProperty', (data) => {
@@ -2476,10 +3017,7 @@ io.on('connection', (socket) => {
                     
                     const activePlayers = room.players.filter(p => !p.bankrupt);
                     if (activePlayers.length === 1) {
-                        io.to(roomId).emit('gameWinner', {
-                            winner: activePlayers[0].name,
-                            winnerPiece: activePlayers[0].piece
-                        });
+                        announceMonopolyWinner(roomId, activePlayers[0].name);
                     }
                 }
             }
@@ -2597,10 +3135,7 @@ io.on('connection', (socket) => {
                     
                     const activePlayers = room.players.filter(p => !p.bankrupt);
                     if (activePlayers.length === 1) {
-                        io.to(roomId).emit('gameWinner', {
-                            winner: activePlayers[0].name,
-                            winnerPiece: activePlayers[0].piece
-                        });
+                        announceMonopolyWinner(roomId, activePlayers[0].name);
                     }
                 }
             }
@@ -2637,11 +3172,7 @@ io.on('connection', (socket) => {
 
         const activePlayers = room.players.filter(p => !p.bankrupt);
         if (activePlayers.length === 1) {
-            room.winner = activePlayers[0].name;
-            io.to(roomId).emit('gameWinner', {
-                winner: activePlayers[0].name,
-                winnerPiece: activePlayers[0].piece
-            });
+            announceMonopolyWinner(roomId, activePlayers[0].name);
         }
     });
 
@@ -2733,17 +3264,17 @@ function generateMonopolyBoard() {
             name = '起点';
             desc = '经过此处可获得$2000奖励';
         } else if (i === 10) {
-            type = 'jail';
+            type = 'parking';
             name = '监狱';
-            desc = '此地为监狱，路过无罪';
+            desc = '路过监狱，安全无虞';
         } else if (i === 20) {
             type = 'parking';
             name = '免费停车';
             desc = '在此休息，不收任何费用';
         } else if (i === 30) {
             type = 'jail';
-            name = '监狱';
-            desc = '在此停一回合';
+            name = '入狱';
+            desc = '落入监狱！下一回合跳过';
         } else if (i === 7 || i === 18 || i === 28 || i === 37) {
             type = 'chance';
             name = '机会';
