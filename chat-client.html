@@ -3844,7 +3844,7 @@
                         let html = '';
                         for (let i = 0; i < parts.length; i++) {
                             if (i % 2 === 0) {
-                                html += parts[i].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                                html += linkifyText(parts[i].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
                             } else {
                                 const mentionedUser = parts[i];
                                 if (mentionedUser === username) {
