@@ -527,6 +527,29 @@
             opacity: 0.7;
         }
 
+        .message-link {
+            color: #58a6ff;
+            text-decoration: none;
+            border-bottom: 1px dashed #58a6ff;
+            word-break: break-all;
+            transition: all 0.2s;
+        }
+
+        .message-link:hover {
+            color: #79b8ff;
+            border-bottom-style: solid;
+            text-decoration: none;
+        }
+
+        .message.own .message-link {
+            color: #a5d6ff;
+            border-bottom-color: #a5d6ff;
+        }
+
+        .message.own .message-link:hover {
+            color: #c9e4ff;
+        }
+
         .system-message {
             text-align: center;
             color: var(--text-muted);
@@ -3576,6 +3599,14 @@
             });
         }
 
+        function linkifyText(text) {
+            const urlRegex = /(https?:\/\/[^\s<]+|www\.[^\s<]+\.[^\s<]+)/gi;
+            return text.replace(urlRegex, (url) => {
+                const href = url.startsWith('www.') ? 'http://' + url : url;
+                return `<a href="${href}" class="message-link" target="_blank" rel="noopener noreferrer">${url}</a>`;
+            });
+        }
+
         function addMessage(data) {
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${data.username === username ? 'own' : 'other'}`;
@@ -3650,7 +3681,7 @@
                 let html = '';
                 for (let i = 0; i < parts.length; i++) {
                     if (i % 2 === 0) {
-                        html += parts[i].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        html += linkifyText(parts[i].replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
                     } else {
                         const mentionedUser = parts[i];
                         if (mentionedUser === username) {
