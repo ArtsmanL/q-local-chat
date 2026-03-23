@@ -120,6 +120,20 @@ function startMonopolyGame(roomId, room) {
                 currentTurn: 0
             });
 
+            const playerNames = room.players.filter(p => !p.isRobot).map(p => p.name).join('、');
+            const robotCount = room.players.filter(p => p.isRobot).length;
+            let startText = `👥 玩家: ${playerNames || '无'}`;
+            if (robotCount > 0) {
+                startText += `\n🤖 机器人: ${robotCount}个`;
+            }
+            
+            io.emit('gameStart', {
+                text: startText,
+                gameType: 'monopoly',
+                players: room.players.map(p => p.name),
+                time: new Date().toLocaleTimeString()
+            });
+
             console.log('大富翁游戏开始:', roomId);
 
             const firstPlayer = room.players[0];
@@ -431,18 +445,105 @@ function nextRobotTurn(roomId) {
 }
 
 function announceMonopolyWinner(roomId, winnerName) {
+    const room = monopolyRooms.get(roomId);
+    const players = room ? room.players.map(p => p.name).filter(n => n !== winnerName) : [];
+    
     io.to(roomId).emit('gameWinner', { winner: winnerName });
     
-    io.emit('message', {
-        username: '🎮 大富翁',
-        ip: 'system',
-        text: `🏆 恭喜 ${winnerName} 在大富翁游戏中获胜！`,
-        type: 'text',
-        time: new Date().toLocaleTimeString(),
-        id: Date.now() + '_monopoly_winner'
+    const resultText = `🌍 大富翁结束！\n🏆 ${winnerName} 获胜！`;
+    io.emit('gameResult', {
+        text: resultText,
+        gameType: 'monopoly',
+        winner: winnerName,
+        players: room ? room.players.map(p => p.name) : [winnerName],
+        time: new Date().toLocaleTimeString()
     });
     
     monopolyRooms.delete(roomId);
+}
+
+function handleMonopolyPlayerExit(roomId, socketId, reason = 'exit') {
+    const room = monopolyRooms.get(roomId);
+    if (!room) return;
+    
+    const playerIndex = room.players.findIndex(p => p.socketId === socketId);
+    if (playerIndex === -1) return;
+    
+    const player = room.players[playerIndex];
+    if (player.isRobot) return;
+    
+    if (room.started) {
+        player.bankrupt = true;
+        
+        room.board.forEach(cell => {
+            if (cell.owner === player.name) {
+                cell.owner = null;
+                cell.houses = 0;
+                cell.isApartment = false;
+            }
+        });
+        
+        io.to(roomId).emit('playerBankrupt', {
+            playerName: player.name,
+            board: room.board.map(c => ({
+                index: c.index,
+                owner: c.owner,
+                houses: c.houses,
+                isApartment: c.isApartment
+            }))
+        });
+        
+        const activePlayers = room.players.filter(p => !p.bankrupt);
+        if (activePlayers.length === 1) {
+            announceMonopolyWinner(roomId, activePlayers[0].name);
+            return;
+        }
+        
+        if (room.currentTurn === playerIndex) {
+            let nextTurn = playerIndex;
+            let attempts = 0;
+            do {
+                nextTurn = (nextTurn + 1) % room.players.length;
+                attempts++;
+            } while (room.players[nextTurn].bankrupt && attempts < room.players.length);
+            
+            room.currentTurn = nextTurn;
+            const nextPlayer = room.players[nextTurn];
+            
+            io.to(roomId).emit('turnChanged', {
+                currentTurn: nextTurn,
+                currentPlayer: nextPlayer.name
+            });
+            
+            if (nextPlayer.isRobot && !nextPlayer.bankrupt) {
+                setTimeout(() => handleRobotTurn(roomId), 1000);
+            }
+        }
+        
+        console.log(`大富翁玩家${reason === 'disconnect' ? '断线' : '退出'}破产:`, player.name, roomId);
+    } else {
+        const isHost = player.isHost;
+        room.players.splice(playerIndex, 1);
+        
+        if (room.players.length === 0 || isHost) {
+            // 房主退出或房间为空，但保留房间让房主可以重新加入
+            room.pendingDelete = true;
+            room.deleteTimeout = setTimeout(() => {
+                const r = monopolyRooms.get(roomId);
+                if (r && r.pendingDelete && r.players.length === 0) {
+                    monopolyRooms.delete(roomId);
+                    io.emit('monopolyRoomEnded', { roomId });
+                    console.log('大富翁房间超时销毁:', roomId);
+                }
+            }, 30000);
+            console.log('大富翁房间等待房主重新加入:', roomId);
+        } else {
+            io.to(roomId).emit('waitingForMonopolyPlayer', {
+                players: room.players.map(p => ({ name: p.name, money: p.money, isHost: p.isHost, ready: p.ready }))
+            });
+            console.log('大富翁玩家退出:', player.name, roomId);
+        }
+    }
 }
 
 const APP_VERSION = '1.7.0';
@@ -903,6 +1004,230 @@ io.on('connection', (socket) => {
                 }
             }
         });
+
+        // 处理大富翁房间断开
+        monopolyRooms.forEach((room, roomId) => {
+            handleMonopolyPlayerExit(roomId, socket.id, 'disconnect');
+        });
+    });
+
+    // 五子棋游戏 - 新的房间机制
+    socket.on('createGomokuRoom', (data) => {
+        let user = users.get(socket.id);
+        
+        if (!user && data && data.playerName) {
+            user = { 
+                username: data.playerName, 
+                ip: getUserIP(socket),
+                joinTime: new Date()
+            };
+            users.set(socket.id, user);
+        }
+        
+        if (!user) {
+            socket.emit('error', { message: '请先登录聊天室' });
+            return;
+        }
+
+        gameRoomCounter++;
+        const roomId = 'gomoku_' + gameRoomCounter;
+
+        const room = {
+            id: roomId,
+            host: socket.id,
+            players: [socket.id],
+            playerNames: [user.username],
+            playerIPs: [user.ip],
+            gameType: 'gomoku',
+            startTime: null,
+            moves: [],
+            currentTurn: 'black',
+            spectators: [],
+            started: false
+        };
+
+        gameRooms.set(roomId, room);
+        socket.join(roomId);
+
+        socket.emit('gomokuRoomCreated', { roomId, isHost: true });
+
+        io.emit('gomokuRoomAvailable', {
+            roomId,
+            hostName: user.username,
+            playerCount: 1
+        });
+
+        console.log('五子棋房间创建:', roomId, user.username);
+    });
+
+    socket.on('joinGomokuRoom', (data) => {
+        const { roomId, playerName } = data;
+        const room = gameRooms.get(roomId);
+        let user = users.get(socket.id);
+
+        if (!room || room.gameType !== 'gomoku') {
+            socket.emit('error', { message: '房间不存在或已结束' });
+            return;
+        }
+
+        if (room.started) {
+            socket.emit('error', { message: '游戏已开始' });
+            return;
+        }
+
+        if (room.players.length >= 2) {
+            socket.emit('error', { message: '房间已满' });
+            return;
+        }
+
+        if (!user && playerName) {
+            user = { 
+                username: playerName, 
+                ip: getUserIP(socket),
+                joinTime: new Date()
+            };
+            users.set(socket.id, user);
+        }
+
+        if (!user) {
+            socket.emit('error', { message: '请先登录聊天室' });
+            return;
+        }
+
+        if (room.players.includes(socket.id)) {
+            socket.emit('error', { message: '你已经在这个房间了' });
+            return;
+        }
+
+        // 清除待删除状态
+        if (room.pendingDelete) {
+            room.pendingDelete = false;
+            if (room.deleteTimeout) {
+                clearTimeout(room.deleteTimeout);
+                room.deleteTimeout = null;
+            }
+        }
+
+        room.players.push(socket.id);
+        room.playerNames.push(user.username);
+        room.playerIPs.push(user.ip);
+        socket.join(roomId);
+
+        socket.emit('gomokuRoomCreated', { roomId, isHost: room.players.length === 1 });
+
+        if (room.players.length === 2) {
+            room.started = true;
+            room.startTime = new Date();
+            
+            io.to(roomId).emit('gomokuGameStart', {
+                roomId,
+                players: room.playerNames,
+                currentTurn: 'black'
+            });
+
+            io.emit('gomokuRoomStarted', { roomId });
+
+            io.emit('gameStart', {
+                text: `⚔️ ${room.playerNames[0]} VS ${room.playerNames[1]}`,
+                gameType: 'gomoku',
+                players: room.playerNames,
+                time: new Date().toLocaleTimeString()
+            });
+
+            io.emit('gomokuRoomEnded', { roomId });
+        }
+
+        console.log('五子棋玩家加入:', roomId, user.username);
+    });
+
+    socket.on('leaveGomokuRoom', (data) => {
+        const { roomId } = data;
+        const room = gameRooms.get(roomId);
+        
+        if (!room || room.gameType !== 'gomoku') return;
+
+        const playerIndex = room.players.indexOf(socket.id);
+        if (playerIndex === -1) return;
+
+        if (room.started) {
+            // 游戏已开始，对方获胜
+            const winnerIndex = playerIndex === 0 ? 1 : 0;
+            const winnerName = room.playerNames[winnerIndex];
+            
+            io.to(roomId).emit('opponentDisconnected');
+            
+            io.emit('gameResult', {
+                text: `🎯 五子棋结束！\n⚠️ 对手退出\n🏆 ${winnerName} 获胜！`,
+                gameType: 'gomoku',
+                winner: winnerName,
+                players: room.playerNames,
+                time: new Date().toLocaleTimeString()
+            });
+
+            gameRooms.delete(roomId);
+            io.emit('gomokuRoomEnded', { roomId });
+        } else {
+            // 游戏未开始，移除玩家
+            room.players.splice(playerIndex, 1);
+            room.playerNames.splice(playerIndex, 1);
+            room.playerIPs.splice(playerIndex, 1);
+            socket.leave(roomId);
+
+            if (room.players.length === 0) {
+                // 房间空了，但保留房间让房主可以重新加入
+                // 设置一个30秒超时自动删除
+                room.pendingDelete = true;
+                room.deleteTimeout = setTimeout(() => {
+                    const r = gameRooms.get(roomId);
+                    if (r && r.pendingDelete && r.players.length === 0) {
+                        gameRooms.delete(roomId);
+                        io.emit('gomokuRoomEnded', { roomId });
+                        console.log('五子棋房间超时销毁:', roomId);
+                    }
+                }, 30000);
+                // 不立即发送 roomEnded，让组队消息保持有效
+                console.log('五子棋房间等待房主重新加入:', roomId);
+            } else {
+                // 更新房间信息
+                room.host = room.players[0];
+                io.emit('gomokuRoomUpdate', {
+                    roomId,
+                    hostName: room.playerNames[0],
+                    playerCount: room.players.length
+                });
+                console.log('五子棋玩家退出:', roomId);
+            }
+        }
+    });
+
+    socket.on('joinGomokuGame', (data) => {
+        const { roomId, playerName, isHost } = data;
+        const room = gameRooms.get(roomId);
+        
+        if (!room || room.gameType !== 'gomoku') {
+            socket.emit('error', { message: '房间不存在或已结束' });
+            return;
+        }
+
+        socket.join(roomId);
+        
+        // 找到该玩家在房间中的索引
+        const playerIndex = room.playerNames.indexOf(playerName);
+        if (playerIndex !== -1) {
+            // 更新该玩家的socketId（游戏窗口的socket）
+            room.players[playerIndex] = socket.id;
+        }
+
+        // 如果游戏已经开始，发送当前游戏状态
+        if (room.started) {
+            socket.emit('gomokuGameStart', {
+                roomId,
+                players: room.playerNames,
+                currentTurn: room.currentTurn
+            });
+        }
+
+        console.log('五子棋游戏窗口加入:', playerName, roomId);
     });
 
     socket.on('teamInvite', (data) => {
@@ -978,6 +1303,18 @@ io.on('connection', (socket) => {
             moves: [],
             currentTurn: 'black',
             spectators: []
+        });
+
+        const gameNames = {
+            'gomoku': '五子棋'
+        };
+        const gameName = gameNames[invite.gameType] || '游戏';
+        
+        io.emit('gameStart', {
+            text: `⚔️ ${invite.username} VS ${user.username}`,
+            gameType: invite.gameType,
+            players: [invite.username, user.username],
+            time: new Date().toLocaleTimeString()
         });
 
         io.emit('gameRoomCreated', {
@@ -1059,17 +1396,17 @@ io.on('connection', (socket) => {
         const loserName = room.playerNames[loserIndex];
         const winnerColor = data.winner;
 
-        let resultText = `🎮 五子棋对战结束！\n🏆 ${winnerName} 获胜！\n⚔️ ${room.playerNames[0]} vs ${room.playerNames[1]}`;
+        let resultText = `🎯 五子棋结束！\n🏆 ${winnerName} 获胜！`;
 
         if (data.reason === 'surrender') {
-            resultText = `🎮 五子棋对战结束！\n🏳️ ${loserName} 认输\n🏆 ${winnerName} 获胜！`;
+            resultText = `🎯 五子棋结束！\n🏳️ ${loserName} 认输\n🏆 ${winnerName} 获胜！`;
         } else if (data.reason === 'disconnect') {
-            resultText = `🎮 五子棋对战结束！\n⚠️ 对手断线\n🏆 ${winnerName} 获胜！`;
+            resultText = `🎯 五子棋结束！\n⚠️ 对手断线\n🏆 ${winnerName} 获胜！`;
         }
 
         io.emit('gameResult', {
             text: resultText,
-            gameType: room.gameType,
+            gameType: 'gomoku',
             winner: winnerName,
             players: room.playerNames,
             time: new Date().toLocaleTimeString()
@@ -1084,7 +1421,8 @@ io.on('connection', (socket) => {
         });
 
         gameRooms.delete(data.roomId);
-        console.log('游戏结束:', winnerName, '获胜');
+        io.emit('gomokuRoomEnded', { roomId: data.roomId });
+        console.log('五子棋游戏结束:', winnerName, '获胜');
     });
 
     socket.on('leaveGameRoom', (data) => {
@@ -1358,6 +1696,13 @@ io.on('connection', (socket) => {
 
         io.emit('fishingRoomStarted', { roomId });
 
+        io.emit('gameStart', {
+            text: `👥 玩家: ${room.players.map(p => p.name).join('、')}`,
+            gameType: 'fishing',
+            players: room.players.map(p => p.name),
+            time: new Date().toLocaleTimeString()
+        });
+
         console.log('金钩钓鱼开始:', roomId, playerCount, '人');
     });
 
@@ -1555,8 +1900,8 @@ io.on('connection', (socket) => {
 
             // 广播游戏结果到群聊
             const winnerName = winnerIndex !== -1 ? room.players[winnerIndex].name : '无';
-            const playerNames = room.players.map(p => p.name).join(' vs ');
-            const resultText = `🎣 金钩钓鱼结束！\n🏆 ${winnerName} 获胜！\n🎮 ${playerNames}`;
+            const playerNames = room.players.map(p => p.name).join('、');
+            const resultText = `🎣 金钩钓鱼结束！\n🏆 ${winnerName} 获胜！\n👥 ${playerNames}`;
 
             io.emit('gameResult', {
                 text: resultText,
@@ -1706,8 +2051,8 @@ io.on('connection', (socket) => {
 
         // 广播游戏结果到群聊
         const winnerName = room.players[winnerIndex].name;
-        const playerNames = room.players.map(p => p.name).join(' vs ');
-        const resultText = `🎣 金钩钓鱼结束！(超时)\n🏆 ${winnerName} 获胜！(${sortedPlayers[0].cardCount}张牌)\n🎮 ${playerNames}`;
+        const playerNames = room.players.map(p => p.name).join('、');
+        const resultText = `🎣 金钩钓鱼结束！\n🏆 ${winnerName} 获胜！(${sortedPlayers[0].cardCount}张牌)`;
 
         io.emit('gameResult', {
             text: resultText,
@@ -1799,6 +2144,15 @@ io.on('connection', (socket) => {
         if (!room) {
             socket.emit('error', { message: '房间不存在或已结束' });
             return;
+        }
+
+        // 清除待删除状态
+        if (room.pendingDelete) {
+            room.pendingDelete = false;
+            if (room.deleteTimeout) {
+                clearTimeout(room.deleteTimeout);
+                room.deleteTimeout = null;
+            }
         }
 
         if (!user && playerName) {
@@ -1922,6 +2276,14 @@ io.on('connection', (socket) => {
                     currentTurn: currentRoom.currentTurn
                 });
                 io.emit('memoryRoomStarted', { roomId });
+                
+                io.emit('gameStart', {
+                    text: `⚔️ ${currentRoom.players[0]?.name} VS ${currentRoom.players[1]?.name}`,
+                    gameType: 'memory',
+                    players: currentRoom.players.map(p => p.name),
+                    time: new Date().toLocaleTimeString()
+                });
+                
                 console.log('翻翻乐开始:', roomId);
             }
         }, 3000);
@@ -2027,7 +2389,7 @@ io.on('connection', (socket) => {
 
         // 广播游戏结果到群聊
         const winnerName = winnerIndex >= 0 ? room.players[winnerIndex].name : '平局';
-        const resultText = `🎴 翻翻乐结束！\n🏆 ${winnerName} 获胜！\n⚔️ ${player1.name} ${player1.score} : ${player2.score} ${player2.name}`;
+        const resultText = `🎴 翻翻乐结束！\n🏆 ${winnerName} 获胜！\n📊 ${player1.score} : ${player2.score}`;
 
         io.emit('gameResult', {
             text: resultText,
@@ -2090,10 +2452,17 @@ io.on('connection', (socket) => {
             memoryRooms.delete(roomId);
             io.emit('memoryRoomEnded', { roomId });
         } else if (isHost) {
-            // 房主退出，销毁房间
-            memoryRooms.delete(roomId);
-            io.emit('memoryRoomEnded', { roomId });
-            console.log('翻翻乐房间销毁:', roomId);
+            // 房主退出，但保留房间让房主可以重新加入
+            room.pendingDelete = true;
+            room.deleteTimeout = setTimeout(() => {
+                const r = memoryRooms.get(roomId);
+                if (r && r.pendingDelete && r.players.length === 0) {
+                    memoryRooms.delete(roomId);
+                    io.emit('memoryRoomEnded', { roomId });
+                    console.log('翻翻乐房间超时销毁:', roomId);
+                }
+            }, 30000);
+            console.log('翻翻乐房间等待房主重新加入:', roomId);
         } else {
             // 普通玩家退出，更新等待列表
             io.to(roomId).emit('waitingForMemoryPlayer', {
@@ -2166,6 +2535,15 @@ io.on('connection', (socket) => {
         if (!room) {
             socket.emit('error', { message: '房间不存在或已结束' });
             return;
+        }
+
+        // 清除待删除状态
+        if (room.pendingDelete) {
+            room.pendingDelete = false;
+            if (room.deleteTimeout) {
+                clearTimeout(room.deleteTimeout);
+                room.deleteTimeout = null;
+            }
         }
 
         if (!user && playerName) {
@@ -3178,31 +3556,8 @@ io.on('connection', (socket) => {
 
     socket.on('leaveMonopolyRoom', (data) => {
         const { roomId } = data;
-        const room = monopolyRooms.get(roomId);
-        if (!room) return;
-
-        const playerIndex = room.players.findIndex(p => p.socketId === socket.id);
-        if (playerIndex === -1) {
-            socket.leave(roomId);
-            return;
-        }
-
-        const player = room.players[playerIndex];
-        const isHost = player.isHost;
-
-        room.players.splice(playerIndex, 1);
+        handleMonopolyPlayerExit(roomId, socket.id, 'exit');
         socket.leave(roomId);
-
-        if (room.players.length === 0 || isHost) {
-            monopolyRooms.delete(roomId);
-            io.emit('monopolyRoomEnded', { roomId });
-            console.log('大富翁房间销毁:', roomId);
-        } else {
-            io.to(roomId).emit('waitingForMonopolyPlayer', {
-                players: room.players.map(p => ({ name: p.name, money: p.money, isHost: p.isHost, ready: p.ready }))
-            });
-            console.log('大富翁玩家退出:', player.name, roomId);
-        }
     });
 });
 

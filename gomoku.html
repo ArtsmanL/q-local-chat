@@ -376,8 +376,9 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room');
-        const isCreator = urlParams.get('creator') === 'true';
+        const isHost = urlParams.get('host') === 'true';
         const isSpectator = urlParams.get('spectator') === 'true';
+        const playerName = urlParams.get('name') || '玩家';
 
         let socket = null;
         let myColor = null;
@@ -389,6 +390,7 @@
         let winStones = [];
         let audioContext = null;
         let spectatorData = null;
+        let waitingForOpponent = true;
 
         const GRID_SIZE = 15;
         const CELL_SIZE = 30;
@@ -598,7 +600,7 @@
             socket.emit('gameOver', {
                 roomId,
                 winner: winner,
-                winnerName: isMeWinner ? (isCreator ? 'black' : 'white') : opponentName
+                winnerName: isMeWinner ? playerName : opponentName
             });
         }
 
@@ -724,7 +726,11 @@
         }
 
         function closeGame() {
-            socket.emit('leaveGameRoom', { roomId });
+            if (waitingForOpponent) {
+                socket.emit('leaveGomokuRoom', { roomId });
+            } else {
+                socket.emit('leaveGameRoom', { roomId });
+            }
             setTimeout(() => window.close(), 100);
         }
 
@@ -737,8 +743,31 @@
                 if (isSpectator) {
                     socket.emit('spectateGame', { roomId });
                 } else {
-                    socket.emit('joinGameRoom', { roomId, isCreator });
+                    socket.emit('joinGomokuGame', { roomId, playerName, isHost });
+                    gameStatus.textContent = '等待对手加入...';
+                    gameStatus.className = 'game-status waiting';
+                    document.querySelector('#playerBlack .player-name').textContent = playerName + '（黑方）';
+                    document.querySelector('#playerWhite .player-name').textContent = '等待中...';
                 }
+            });
+
+            socket.on('gomokuGameStart', (data) => {
+                waitingForOpponent = false;
+                myColor = isHost ? 'black' : 'white';
+                
+                const playerNames = data.players;
+                const blackName = playerNames[0] || '黑方';
+                const whiteName = playerNames[1] || '白方';
+                opponentName = myColor === 'black' ? whiteName : blackName;
+
+                initBoard();
+                gameOver = false;
+                currentTurn = data.currentTurn || 'black';
+
+                document.querySelector('#playerBlack .player-name').textContent = blackName + '（黑方）';
+                document.querySelector('#playerWhite .player-name').textContent = whiteName + '（白方）';
+
+                updateTurnDisplay();
             });
 
             socket.on('spectateStart', (data) => {
@@ -784,33 +813,6 @@
                 gameStatus.textContent = data.message;
                 gameStatus.className = 'game-status';
                 setTimeout(() => window.close(), 2000);
-            });
-
-            socket.on('gameStart', (data) => {
-                myColor = isCreator ? 'black' : 'white';
-                
-                const aliases = getUserAliases();
-                
-                const creatorDisplay = aliases[data.creatorIp] || data.creatorName || '黑方';
-                const joinerDisplay = aliases[data.joinerIp] || data.joinerName || '白方';
-
-                initBoard();
-                gameOver = false;
-                currentTurn = 'black';
-                lastMove = null;
-
-                if (isCreator) {
-                    document.querySelector('#playerBlack .player-name').textContent = '我（黑方）';
-                    document.querySelector('#playerWhite .player-name').textContent = joinerDisplay + '（白方）';
-                    opponentName = joinerDisplay;
-                } else {
-                    document.querySelector('#playerBlack .player-name').textContent = creatorDisplay + '（黑方）';
-                    document.querySelector('#playerWhite .player-name').textContent = '我（白方）';
-                    opponentName = creatorDisplay;
-                }
-
-                gameStatus.textContent = '游戏开始！黑棋先行';
-                updateTurnDisplay();
             });
 
             function getUserAliases() {

@@ -1496,6 +1496,16 @@
             });
 
             socket.on('gameStart', async (data) => {
+                // 忽略全局广播的 gameStart（有 text 字段但没有 cards）
+                if (data.text && !data.cards) {
+                    return;
+                }
+                
+                // 防止重复触发
+                if (gameOver === false && myCards.length > 0) {
+                    return;
+                }
+                
                 myPlayerIndex = data.playerIndex;
                 players = data.players;
                 boardCards = data.boardCards || [];

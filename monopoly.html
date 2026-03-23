@@ -1444,6 +1444,197 @@
             return index >= 0 ? PIECE_COLORS[index] : '#fff';
         }
 
+        let audioContext = null;
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            return audioContext;
+        }
+
+        function playDiceSound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            for (let i = 0; i < 6; i++) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200 + Math.random() * 300, now + i * 0.05);
+                gain.gain.setValueAtTime(0.15, now + i * 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.05 + 0.08);
+                
+                osc.start(now + i * 0.05);
+                osc.stop(now + i * 0.05 + 0.08);
+            }
+        }
+
+        function playBuySound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523, now);
+            osc.frequency.setValueAtTime(659, now + 0.1);
+            osc.frequency.setValueAtTime(784, now + 0.2);
+            
+            gain.gain.setValueAtTime(0.25, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            
+            osc.start(now);
+            osc.stop(now + 0.35);
+        }
+
+        function playCoinSound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            [1200, 1600].forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                gain.gain.setValueAtTime(0.2, now + i * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.15);
+                
+                osc.start(now + i * 0.08);
+                osc.stop(now + i * 0.08 + 0.15);
+            });
+        }
+
+        function playPaySound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(200, now + 0.2);
+            
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+            
+            osc.start(now);
+            osc.stop(now + 0.25);
+        }
+
+        function playChanceSound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            const notes = [392, 440, 494, 523, 587, 659];
+            notes.forEach((freq, i) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.06);
+                gain.gain.setValueAtTime(0.15, now + i * 0.06);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.06 + 0.1);
+                
+                osc.start(now + i * 0.06);
+                osc.stop(now + i * 0.06 + 0.1);
+            });
+        }
+
+        function playJailSound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            for (let i = 0; i < 3; i++) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now + i * 0.3);
+                osc.frequency.setValueAtTime(150, now + i * 0.3 + 0.15);
+                
+                gain.gain.setValueAtTime(0.1, now + i * 0.3);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.3 + 0.25);
+                
+                osc.start(now + i * 0.3);
+                osc.stop(now + i * 0.3 + 0.25);
+            }
+        }
+
+        function playVictorySound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            const melody = [
+                { freq: 523, time: 0 },
+                { freq: 587, time: 0.15 },
+                { freq: 659, time: 0.3 },
+                { freq: 784, time: 0.45 },
+                { freq: 880, time: 0.6 },
+                { freq: 1047, time: 0.75 }
+            ];
+            
+            melody.forEach(note => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(note.freq, now + note.time);
+                gain.gain.setValueAtTime(0.25, now + note.time);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + note.time + 0.2);
+                
+                osc.start(now + note.time);
+                osc.stop(now + note.time + 0.2);
+            });
+        }
+
+        function playMoveSound() {
+            initAudio();
+            const ctx = audioContext;
+            const now = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, now);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+            
+            osc.start(now);
+            osc.stop(now + 0.05);
+        }
+
         function addBroadcast(message, type = '') {
             const list = document.getElementById('broadcastList');
             const item = document.createElement('div');
@@ -1503,6 +1694,12 @@
                             <div class="chance-card-text">${card.text}</div>
                             <div class="chance-card-amount ${amountClass}">${amountText}</div>
                         `;
+                        
+                        if (card.money && card.money > 0) {
+                            playCoinSound();
+                        } else if (card.money && card.money < 0) {
+                            playPaySound();
+                        }
                         
                         setTimeout(() => {
                             modal.classList.remove('show');
@@ -1887,6 +2084,7 @@
                 marker.style.left = (toPos.left + 15 + offset) + 'px';
                 marker.style.top = (toPos.top + 15 + offset) + 'px';
                 marker.classList.add('jumping');
+                playMoveSound();
                 
                 setTimeout(() => {
                     marker.classList.remove('jumping');
@@ -2585,6 +2783,8 @@
             const diceEl = document.getElementById('dice');
             const rollBtn = document.getElementById('rollBtn');
             
+            playDiceSound();
+            
             diceEl.classList.add('rolling');
             rollBtn.disabled = true;
             
@@ -2609,6 +2809,7 @@
             const isMyAction = players[currentTurn] && players[currentTurn].name === playerName;
             
             if (data.passedStart) {
+                playCoinSound();
                 addBroadcast(`${data.playerName} 经过起点获得 $2000！`, 'start');
                 document.getElementById('gameStatus').textContent = 
                     `${data.playerName} 经过起点获得 $2000！`;
@@ -2616,6 +2817,7 @@
             
             if (data.landAction) {
                 if (data.landAction.type === 'rent') {
+                    playPaySound();
                     addBroadcast(`${data.playerName} 向 ${data.landAction.owner} 支付过路费 $${data.landAction.amount}`, 'rent');
                     animateRentPayment(data.cell.index, data.landAction.owner, data.landAction.amount);
                     document.getElementById('gameStatus').textContent = 
@@ -2638,11 +2840,13 @@
                     }
                     return;
                 } else if (data.landAction.type === 'tax') {
+                    playPaySound();
                     addBroadcast(`${data.playerName} 缴纳税款 $${data.landAction.amount}`, 'tax');
                     animateTaxPayment(playerIdx, data.cell.index, data.landAction.amount);
                     document.getElementById('gameStatus').textContent = 
                         `${data.playerName} 缴纳税款 $${data.landAction.amount}`;
                 } else if (data.landAction.type === 'chance' && data.chanceCard) {
+                    playChanceSound();
                     addBroadcast(`${data.playerName} 抽取机会卡：${data.chanceCard.text}`, 'chance');
                     
                     if (isMyAction) {
@@ -2677,6 +2881,7 @@
                     }
                     return;
                 } else if (data.landAction.type === 'jail') {
+                    playJailSound();
                     addBroadcast(`${data.playerName} 进入监狱！下一回合跳过`, 'jail');
                 } else if (data.landAction.type === 'parking') {
                     addBroadcast(`${data.playerName} 停在免费停车站！`, 'parking');
@@ -2699,16 +2904,25 @@
         });
 
         socket.on('turnSkipped', (data) => {
+            playJailSound();
             addBroadcast(`${data.playerName} 在监狱中，回合跳过`, 'jail');
         });
 
         socket.on('propertyBought', (data) => {
+            playBuySound();
             document.getElementById('landModal').classList.remove('show');
             players = data.players;
             currentTurn = data.currentTurn;
             
-            if (data.board) {
-                board = data.board;
+            if (data.board && board.length > 0) {
+                data.board.forEach(serverCell => {
+                    const localCell = board[serverCell.index];
+                    if (localCell) {
+                        localCell.owner = serverCell.owner;
+                        localCell.houses = serverCell.houses;
+                        localCell.isApartment = serverCell.isApartment;
+                    }
+                });
             }
             
             updatePlayersPanel();
@@ -2717,9 +2931,10 @@
             const ownerPlayer = players.find(p => p.name === data.owner);
             const ownerColor = data.ownerColor || (ownerPlayer ? getPieceColor(ownerPlayer.piece) : '#fff');
             
-            addBroadcast(`${data.owner} 购买了 ${board[data.position]?.name}，花费 $${board[data.position]?.price}`, 'buy');
+            const cell = board[data.position];
+            addBroadcast(`${data.owner} 购买了 ${cell?.name || '地产'}，花费 $${cell?.price || ''}`, 'buy');
             document.getElementById('gameStatus').textContent = 
-                `${data.owner} 购买了 ${board[data.position]?.name}！`;
+                `${data.owner} 购买了 ${cell?.name || '地产'}！`;
             
             const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
             if (cellEl) {
@@ -2730,12 +2945,20 @@
         });
 
         socket.on('houseBuilt', (data) => {
+            playBuySound();
             document.getElementById('landModal').classList.remove('show');
             players = data.players;
             currentTurn = data.currentTurn;
             
-            if (data.board) {
-                board = data.board;
+            if (data.board && board.length > 0) {
+                data.board.forEach(serverCell => {
+                    const localCell = board[serverCell.index];
+                    if (localCell) {
+                        localCell.owner = serverCell.owner;
+                        localCell.houses = serverCell.houses;
+                        localCell.isApartment = serverCell.isApartment;
+                    }
+                });
             }
             
             updatePlayersPanel();
@@ -2786,9 +3009,19 @@
             });
             updatePlayersPanel();
             
-            addBroadcast(`${data.seller} 变卖 ${board[data.position]?.name}，获得 $${data.sellPrice}`, 'sell');
+            const cell = board[data.position];
+            addBroadcast(`${data.seller} 变卖 ${cell?.name || '地产'}，获得 $${data.sellPrice}`, 'sell');
             
-            board = data.board;
+            if (data.board && board.length > 0) {
+                data.board.forEach(serverCell => {
+                    const localCell = board[serverCell.index];
+                    if (localCell) {
+                        localCell.owner = serverCell.owner;
+                        localCell.houses = serverCell.houses;
+                        localCell.isApartment = serverCell.isApartment;
+                    }
+                });
+            }
             updateCellDisplay({ index: data.position, owner: null, houses: 0, isApartment: false });
             
             const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
@@ -2808,9 +3041,19 @@
             });
             updatePlayersPanel();
             
-            addBroadcast(`${data.seller} 出售 ${board[data.position]?.name} 房屋，获得 $${data.sellPrice}`, 'sell');
+            const cell = board[data.position];
+            addBroadcast(`${data.seller} 出售 ${cell?.name || '地产'} 房屋，获得 $${data.sellPrice}`, 'sell');
             
-            board = data.board;
+            if (data.board && board.length > 0) {
+                data.board.forEach(serverCell => {
+                    const localCell = board[serverCell.index];
+                    if (localCell) {
+                        localCell.owner = serverCell.owner;
+                        localCell.houses = serverCell.houses;
+                        localCell.isApartment = serverCell.isApartment;
+                    }
+                });
+            }
             
             const cellEl = document.querySelector(`.cell[data-index="${data.position}"]`);
             if (cellEl) {
@@ -2868,7 +3111,21 @@
         });
 
         socket.on('playerBankrupt', (data) => {
-            board = data.board;
+            const bankruptPlayer = players.find(p => p.name === data.playerName);
+            if (bankruptPlayer) {
+                bankruptPlayer.bankrupt = true;
+            }
+            
+            if (data.board && board.length > 0) {
+                data.board.forEach(serverCell => {
+                    const localCell = board[serverCell.index];
+                    if (localCell) {
+                        localCell.owner = serverCell.owner;
+                        localCell.houses = serverCell.houses;
+                        localCell.isApartment = serverCell.isApartment;
+                    }
+                });
+            }
             
             data.board.forEach((cell, idx) => {
                 if (!cell.owner) {
@@ -2890,9 +3147,12 @@
                 const marker = document.getElementById(`marker-${bankruptIdx}`);
                 if (marker) marker.remove();
             }
+            
+            updatePlayersPanel();
         });
 
         socket.on('gameWinner', (data) => {
+            playVictorySound();
             addBroadcast(`🏆 游戏结束！${data.winner} 获胜！`, 'win');
             document.getElementById('gameStatus').textContent = `🏆 ${data.winner} 获胜！`;
             document.getElementById('rollBtn').style.display = 'none';

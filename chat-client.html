@@ -1088,7 +1088,7 @@
             gap: 8px;
         }
 
-        .fishing-join-btn, .fishing-spectate-btn {
+        .fishing-join-btn, .fishing-spectate-btn, .gomoku-join-btn {
             padding: 8px 16px;
             border: none;
             border-radius: 8px;
@@ -1097,16 +1097,16 @@
             transition: all 0.2s;
         }
 
-        .fishing-join-btn {
+        .fishing-join-btn, .gomoku-join-btn {
             background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
             color: white;
         }
 
-        .fishing-join-btn:hover:not(:disabled) {
+        .fishing-join-btn:hover:not(:disabled), .gomoku-join-btn:hover:not(:disabled) {
             transform: scale(1.05);
         }
 
-        .fishing-join-btn:disabled {
+        .fishing-join-btn:disabled, .gomoku-join-btn:disabled {
             background: #666;
             cursor: not-allowed;
         }
@@ -1175,6 +1175,38 @@
         }
 
         .game-result-content {
+            color: var(--text-secondary);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .game-start-message {
+            display: inline-block;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            border-radius: 12px;
+            min-width: 180px;
+        }
+
+        .game-start-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .game-start-icon {
+            font-size: 18px;
+        }
+
+        .game-start-title {
+            color: var(--text-primary);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .game-start-content {
             color: var(--text-secondary);
             font-size: 13px;
             line-height: 1.6;
@@ -2680,12 +2712,21 @@
                 alert('未连接到服务器');
                 return;
             }
-            socket.emit('teamInvite', { gameType });
+            if (gameType === 'gomoku') {
+                socket.emit('createGomokuRoom', { playerName: username });
+            } else {
+                socket.emit('teamInvite', { gameType });
+            }
         }
 
         function joinTeam(inviteId) {
             if (!socket || !socket.connected) return;
             socket.emit('joinTeam', { inviteId });
+        }
+
+        function joinGomokuRoom(roomId) {
+            if (!socket || !socket.connected) return;
+            socket.emit('joinGomokuRoom', { roomId, playerName: username });
         }
 
         function openGameWindow(gameType, roomId, isCreator) {
@@ -2698,7 +2739,7 @@
             } else if (gameType === 'monopoly') {
                 gameUrl = `/monopoly.html?room=${roomId}&host=${isCreator}&name=${encodedName}`;
             } else {
-                gameUrl = `/gomoku.html?room=${roomId}&creator=${isCreator}&name=${encodedName}`;
+                gameUrl = `/gomoku.html?room=${roomId}&host=${isCreator}&name=${encodedName}`;
             }
             const gameWindow = window.open(gameUrl, gameType + '_' + roomId, 'width=1200,height=850');
             if (gameWindow) {
@@ -3442,6 +3483,22 @@
                 openGameWindow('monopoly', data.roomId, data.isHost);
             });
 
+            socket.on('gomokuRoomCreated', (data) => {
+                openGameWindow('gomoku', data.roomId, data.isHost);
+            });
+
+            socket.on('gomokuRoomAvailable', (data) => {
+                addGomokuInviteMessage(data);
+            });
+
+            socket.on('gomokuRoomUpdate', (data) => {
+                updateGomokuInviteMessage(data);
+            });
+
+            socket.on('gomokuRoomEnded', (data) => {
+                removeGomokuInvite(data.roomId);
+            });
+
             socket.on('monopolyRoomAvailable', (data) => {
                 addMonopolyInviteMessage(data);
             });
@@ -3492,6 +3549,10 @@
 
             socket.on('gameResult', (data) => {
                 addGameResultMessage(data);
+            });
+
+            socket.on('gameStart', (data) => {
+                addGameStartMessage(data);
             });
 
             socket.on('versionInfo', (data) => {
@@ -3806,21 +3867,16 @@
 
         function addTeamInviteMessage(data) {
             const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${data.username === username ? 'own' : 'other'}`;
+            msgDiv.className = 'message other';
             msgDiv.dataset.inviteId = data.inviteId;
 
             const senderDiv = document.createElement('div');
             senderDiv.className = 'message-sender';
-            const alias = getUserAlias(data.ip);
-            senderDiv.textContent = alias || data.username;
+            senderDiv.textContent = '🎯 五子棋';
 
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
             bubbleDiv.style.fontSize = currentFontSize + 'px';
-
-            const gameNames = {
-                'gomoku': '五子棋'
-            };
 
             const isOwn = data.username === username;
             const isExpired = pendingTeamInvites.has(data.inviteId) && pendingTeamInvites.get(data.inviteId).matched;
@@ -3831,7 +3887,7 @@
                         <span class="team-invite-icon">🎮</span>
                         <span class="team-invite-title">${data.username} 发起组队</span>
                     </div>
-                    <div class="team-invite-game">游戏：${gameNames[data.gameType] || data.gameType}</div>
+                    <div class="team-invite-game">游戏：五子棋</div>
                     ${isOwn ? 
                         `<div class="team-expired">等待其他玩家加入...</div>` : 
                         `<button class="team-join-btn" data-invite-id="${data.inviteId}" ${isExpired ? 'disabled' : ''}>
@@ -3854,15 +3910,13 @@
             timeDiv.className = 'message-time';
             timeDiv.textContent = data.time;
 
-            if (data.username !== username) {
-                msgDiv.appendChild(senderDiv);
-                incrementUnread();
-            }
+            msgDiv.appendChild(senderDiv);
             msgDiv.appendChild(bubbleDiv);
             msgDiv.appendChild(timeDiv);
 
             messagesDiv.appendChild(msgDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            incrementUnread();
 
             pendingTeamInvites.set(data.inviteId, { 
                 username: data.username, 
@@ -3929,6 +3983,95 @@
             }
         }
 
+        let activeGomokuRooms = new Map();
+
+        function addGomokuInviteMessage(data) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message other';
+            msgDiv.dataset.roomId = data.roomId;
+            msgDiv.dataset.gameType = 'gomoku';
+
+            const senderDiv = document.createElement('div');
+            senderDiv.className = 'message-sender';
+            senderDiv.textContent = '🎯 五子棋';
+
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.style.fontSize = currentFontSize + 'px';
+
+            bubbleDiv.innerHTML = `
+                <div class="fishing-invite-message">
+                    <div class="fishing-header">
+                        <span class="fishing-icon">🎯</span>
+                        <span class="fishing-title">五子棋</span>
+                    </div>
+                    <div class="fishing-host">房主: ${data.hostName}</div>
+                    <div class="fishing-players">当前人数: <span class="fishing-count">1</span>/2</div>
+                    <div class="fishing-actions">
+                        <button class="gomoku-join-btn" data-room-id="${data.roomId}">加入游戏</button>
+                    </div>
+                </div>
+            `;
+
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+
+            msgDiv.appendChild(senderDiv);
+            msgDiv.appendChild(bubbleDiv);
+            msgDiv.appendChild(timeDiv);
+
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            incrementUnread();
+
+            const joinBtn = bubbleDiv.querySelector('.gomoku-join-btn');
+            joinBtn.addEventListener('click', () => {
+                joinGomokuRoom(data.roomId);
+            });
+
+            activeGomokuRooms.set(data.roomId, { hostName: data.hostName, playerCount: 1 });
+        }
+
+        function updateGomokuInviteMessage(data) {
+            const msgDiv = document.querySelector(`.message[data-room-id="${data.roomId}"]`);
+            if (!msgDiv) return;
+
+            const hostDiv = msgDiv.querySelector('.fishing-host');
+            if (hostDiv) {
+                hostDiv.textContent = `房主: ${data.hostName}`;
+            }
+
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan && data.playerCount) {
+                countSpan.textContent = data.playerCount;
+            }
+
+            const room = activeGomokuRooms.get(data.roomId);
+            if (room) {
+                room.hostName = data.hostName;
+                room.playerCount = data.playerCount;
+            }
+        }
+
+        function removeGomokuInvite(roomId) {
+            const msgDiv = document.querySelector(`.message[data-room-id="${roomId}"]`);
+            if (!msgDiv) return;
+            
+            const joinBtn = msgDiv.querySelector('.gomoku-join-btn');
+            if (joinBtn) {
+                joinBtn.disabled = true;
+                joinBtn.textContent = '已结束';
+            }
+            
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan) {
+                countSpan.textContent = '已结束';
+            }
+            
+            activeGomokuRooms.delete(roomId);
+        }
+
         let activeFishingRooms = new Map();
 
         function addFishingInviteMessage(data) {
@@ -3936,6 +4079,10 @@
             msgDiv.className = 'message other';
             msgDiv.dataset.roomId = data.roomId;
             msgDiv.dataset.gameType = 'fishing';
+
+            const senderDiv = document.createElement('div');
+            senderDiv.className = 'message-sender';
+            senderDiv.textContent = '🎣 金钩钓鱼';
 
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
@@ -3960,6 +4107,7 @@
             timeDiv.className = 'message-time';
             timeDiv.textContent = new Date().toLocaleTimeString();
 
+            msgDiv.appendChild(senderDiv);
             msgDiv.appendChild(bubbleDiv);
             msgDiv.appendChild(timeDiv);
 
@@ -3970,8 +4118,6 @@
             const joinBtn = bubbleDiv.querySelector('.fishing-join-btn');
             joinBtn.addEventListener('click', () => {
                 joinFishingRoom(data.roomId);
-                joinBtn.disabled = true;
-                joinBtn.textContent = '已加入';
             });
 
             activeFishingRooms.set(data.roomId, { hostName: data.hostName, playerCount: data.playerCount });
@@ -4015,9 +4161,19 @@
 
         function removeFishingInvite(roomId) {
             const msgDiv = document.querySelector(`.message[data-room-id="${roomId}"]`);
-            if (msgDiv) {
-                msgDiv.remove();
+            if (!msgDiv) return;
+            
+            const joinBtn = msgDiv.querySelector('.fishing-join-btn');
+            if (joinBtn) {
+                joinBtn.disabled = true;
+                joinBtn.textContent = '已结束';
             }
+            
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan) {
+                countSpan.textContent = '已结束';
+            }
+            
             activeFishingRooms.delete(roomId);
         }
 
@@ -4028,6 +4184,10 @@
             msgDiv.className = 'message other';
             msgDiv.dataset.roomId = data.roomId;
             msgDiv.dataset.gameType = 'memory';
+
+            const senderDiv = document.createElement('div');
+            senderDiv.className = 'message-sender';
+            senderDiv.textContent = '🎴 翻翻乐';
 
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
@@ -4040,7 +4200,7 @@
                         <span class="fishing-title">翻翻乐</span>
                     </div>
                     <div class="fishing-host">房主: ${data.hostName}</div>
-                    <div class="fishing-players">状态: <span class="fishing-status">等待对手</span></div>
+                    <div class="fishing-players">当前人数: <span class="fishing-count">1</span>/2</div>
                     <div class="fishing-actions">
                         <button class="memory-join-btn" data-room-id="${data.roomId}">加入游戏</button>
                     </div>
@@ -4051,6 +4211,7 @@
             timeDiv.className = 'message-time';
             timeDiv.textContent = new Date().toLocaleTimeString();
 
+            msgDiv.appendChild(senderDiv);
             msgDiv.appendChild(bubbleDiv);
             msgDiv.appendChild(timeDiv);
 
@@ -4061,14 +4222,19 @@
             const joinBtn = bubbleDiv.querySelector('.memory-join-btn');
             joinBtn.addEventListener('click', () => {
                 joinMemoryRoom(data.roomId);
-                joinBtn.disabled = true;
-                joinBtn.textContent = '已加入';
             });
 
             activeMemoryRooms.set(data.roomId, { hostName: data.hostName });
         }
 
         function updateMemoryInviteMessage(data) {
+            const msgDiv = document.querySelector(`.message[data-room-id="${data.roomId}"]`);
+            if (!msgDiv) return;
+
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan && data.playerCount) {
+                countSpan.textContent = data.playerCount;
+            }
         }
 
         function markMemoryStarted(roomId) {
@@ -4081,17 +4247,27 @@
                 joinBtn.textContent = '已开始';
             }
 
-            const statusSpan = msgDiv.querySelector('.fishing-status');
-            if (statusSpan) {
-                statusSpan.textContent = '游戏中';
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan) {
+                countSpan.textContent = '2';
             }
         }
 
         function removeMemoryInvite(roomId) {
             const msgDiv = document.querySelector(`.message[data-room-id="${roomId}"]`);
-            if (msgDiv) {
-                msgDiv.remove();
+            if (!msgDiv) return;
+            
+            const joinBtn = msgDiv.querySelector('.memory-join-btn');
+            if (joinBtn) {
+                joinBtn.disabled = true;
+                joinBtn.textContent = '已结束';
             }
+            
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan) {
+                countSpan.textContent = '已结束';
+            }
+            
             activeMemoryRooms.delete(roomId);
         }
 
@@ -4110,6 +4286,10 @@
             msgDiv.className = 'message other';
             msgDiv.dataset.roomId = data.roomId;
             msgDiv.dataset.gameType = 'monopoly';
+
+            const senderDiv = document.createElement('div');
+            senderDiv.className = 'message-sender';
+            senderDiv.textContent = '🌍 大富翁';
 
             const bubbleDiv = document.createElement('div');
             bubbleDiv.className = 'message-bubble';
@@ -4133,6 +4313,7 @@
             timeDiv.className = 'message-time';
             timeDiv.textContent = new Date().toLocaleTimeString();
 
+            msgDiv.appendChild(senderDiv);
             msgDiv.appendChild(bubbleDiv);
             msgDiv.appendChild(timeDiv);
 
@@ -4143,8 +4324,6 @@
             const joinBtn = bubbleDiv.querySelector('.fishing-join-btn');
             joinBtn.addEventListener('click', () => {
                 joinMonopolyRoom(data.roomId);
-                joinBtn.disabled = true;
-                joinBtn.textContent = '已加入';
             });
 
             activeMonopolyRooms.set(data.roomId, { hostName: data.hostName, playerCount: 1 });
@@ -4183,9 +4362,19 @@
 
         function removeMonopolyInvite(roomId) {
             const msgDiv = document.querySelector(`.message[data-room-id="${roomId}"]`);
-            if (msgDiv) {
-                msgDiv.remove();
+            if (!msgDiv) return;
+            
+            const joinBtn = msgDiv.querySelector('.fishing-join-btn');
+            if (joinBtn) {
+                joinBtn.disabled = true;
+                joinBtn.textContent = '已结束';
             }
+            
+            const countSpan = msgDiv.querySelector('.fishing-count');
+            if (countSpan) {
+                countSpan.textContent = '已结束';
+            }
+            
             activeMonopolyRooms.delete(roomId);
         }
 
@@ -4201,13 +4390,75 @@
             bubbleDiv.className = 'message-bubble';
             bubbleDiv.style.fontSize = currentFontSize + 'px';
 
+            const gameIcons = {
+                'gomoku': '🎯',
+                'fishing': '🎣',
+                'memory': '🎴',
+                'monopoly': '🌍'
+            };
+            const gameNames = {
+                'gomoku': '五子棋',
+                'fishing': '金钩钓鱼',
+                'memory': '翻翻乐',
+                'monopoly': '大富翁'
+            };
+            
+            const icon = gameIcons[data.gameType] || '🎮';
+            const gameName = gameNames[data.gameType] || '游戏';
+
             bubbleDiv.innerHTML = `
                 <div class="game-result-message">
                     <div class="game-result-header">
-                        <span class="game-result-icon">🎮</span>
-                        <span class="game-result-title">游戏结束</span>
+                        <span class="game-result-icon">${icon}</span>
+                        <span class="game-result-title">${gameName}结束</span>
                     </div>
                     <div class="game-result-content">${data.text.replace(/\n/g, '<br>')}</div>
+                </div>
+            `;
+
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = data.time;
+
+            msgDiv.appendChild(bubbleDiv);
+            msgDiv.appendChild(timeDiv);
+
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            incrementUnread();
+        }
+
+        function addGameStartMessage(data) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message other';
+
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.style.fontSize = currentFontSize + 'px';
+
+            const gameIcons = {
+                'gomoku': '🎯',
+                'fishing': '🎣',
+                'memory': '🎴',
+                'monopoly': '🌍'
+            };
+            const gameNames = {
+                'gomoku': '五子棋',
+                'fishing': '金钩钓鱼',
+                'memory': '翻翻乐',
+                'monopoly': '大富翁'
+            };
+            
+            const icon = gameIcons[data.gameType] || '🎮';
+            const gameName = gameNames[data.gameType] || '游戏';
+
+            bubbleDiv.innerHTML = `
+                <div class="game-start-message">
+                    <div class="game-start-header">
+                        <span class="game-start-icon">${icon}</span>
+                        <span class="game-start-title">${gameName}开始</span>
+                    </div>
+                    <div class="game-start-content">${data.text.replace(/\n/g, '<br>')}</div>
                 </div>
             `;
 
