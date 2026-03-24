@@ -550,8 +550,19 @@ function handleMonopolyPlayerExit(roomId, socketId, reason = 'exit') {
     }
 }
 
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.8.0';
 const CHANGELOG = [
+    {
+        version: '1.8.0',
+        date: '2026-03-24',
+        changes: [
+            '新增四子棋游戏（2人对战）',
+            '棋子落子弹跳动画 + 触底音效',
+            '实时显示对手鼠标位置',
+            '悬停预览棋子落点',
+            '修复游戏结束消息同步'
+        ]
+    },
     {
         version: '1.7.0',
         date: '2026-03-20',
