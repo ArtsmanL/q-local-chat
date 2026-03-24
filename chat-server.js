@@ -20,6 +20,8 @@ const server = http.createServer((req, res) => {
         filePath = path.join(__dirname, 'memory.html');
     } else if (urlPath === '/monopoly.html') {
         filePath = path.join(__dirname, 'monopoly.html');
+    } else if (urlPath === '/connect4.html') {
+        filePath = path.join(__dirname, 'connect4.html');
     } else {
         res.writeHead(404);
         res.end('Not found');
@@ -55,10 +57,12 @@ const gameRooms = new Map();
 const fishingRooms = new Map();
 const memoryRooms = new Map();
 const monopolyRooms = new Map();
+const connect4Rooms = new Map();
 let gameRoomCounter = 0;
 let fishingRoomCounter = 0;
 let memoryRoomCounter = 0;
 let monopolyRoomCounter = 0;
+let connect4RoomCounter = 0;
 
 let roomPassword = null;
 let serverIP = null;
@@ -1009,6 +1013,62 @@ io.on('connection', (socket) => {
         monopolyRooms.forEach((room, roomId) => {
             handleMonopolyPlayerExit(roomId, socket.id, 'disconnect');
         });
+
+        // 处理四子棋房间断开
+        connect4Rooms.forEach((room, roomId) => {
+            const playerIndex = room.players.indexOf(socket.id);
+            if (playerIndex !== -1) {
+                if (room.started) {
+                    // 游戏已开始，通知对手
+                    const otherPlayer = room.players.find(id => id !== socket.id);
+                    const winnerIndex = playerIndex === 0 ? 1 : 0;
+                    const winnerName = room.playerNames[winnerIndex];
+                    const loserName = room.playerNames[playerIndex];
+                    
+                    if (otherPlayer) {
+                        io.to(otherPlayer).emit('opponentDisconnected');
+                    }
+                    
+                    io.emit('gameEnd', {
+                        text: `👋 四子棋：${loserName} 断线，${winnerName} 获胜！`,
+                        gameType: 'connect4',
+                        winner: winnerName,
+                        loser: loserName,
+                        time: new Date().toLocaleTimeString()
+                    });
+                    io.emit('connect4RoomEnded', { roomId });
+                    connect4Rooms.delete(roomId);
+                } else {
+                    // 游戏未开始，移除玩家
+                    room.players.splice(playerIndex, 1);
+                    room.playerNames.splice(playerIndex, 1);
+                    room.playerIPs.splice(playerIndex, 1);
+                    socket.leave(roomId);
+
+                    if (room.players.length === 0) {
+                        room.pendingDelete = true;
+                        room.deleteTimeout = setTimeout(() => {
+                            const r = connect4Rooms.get(roomId);
+                            if (r && r.pendingDelete && r.players.length === 0) {
+                                connect4Rooms.delete(roomId);
+                                io.emit('connect4RoomEnded', { roomId });
+                                console.log('四子棋房间超时销毁:', roomId);
+                            }
+                        }, 30000);
+                    } else {
+                        room.host = room.players[0];
+                        io.emit('connect4RoomUpdate', {
+                            roomId,
+                            hostName: room.playerNames[0],
+                            playerCount: room.players.length
+                        });
+                        io.to(roomId).emit('waitingForConnect4Player', {
+                            players: room.players.map((p, i) => ({ name: room.playerNames[i], isHost: i === 0 }))
+                        });
+                    }
+                }
+            }
+        });
     });
 
     // 五子棋游戏 - 新的房间机制
@@ -1229,6 +1289,342 @@ io.on('connection', (socket) => {
 
         console.log('五子棋游戏窗口加入:', playerName, roomId);
     });
+
+    // 四子棋游戏
+    socket.on('createConnect4Room', (data) => {
+        let user = users.get(socket.id);
+        
+        if (!user && data && data.playerName) {
+            user = { 
+                username: data.playerName, 
+                ip: getUserIP(socket),
+                joinTime: new Date()
+            };
+            users.set(socket.id, user);
+        }
+        
+        if (!user) {
+            socket.emit('error', { message: '请先登录聊天室' });
+            return;
+        }
+
+        connect4RoomCounter++;
+        const roomId = 'connect4_' + connect4RoomCounter;
+
+        const room = {
+            id: roomId,
+            host: socket.id,
+            players: [socket.id],
+            playerNames: [user.username],
+            playerIPs: [user.ip],
+            gameType: 'connect4',
+            board: Array(6).fill(null).map(() => Array(7).fill(null)),
+            currentTurn: 0,
+            started: false,
+            spectators: [],
+            pendingDelete: false,
+            deleteTimeout: null
+        };
+
+        connect4Rooms.set(roomId, room);
+        socket.join(roomId);
+
+        socket.emit('connect4RoomCreated', { roomId, isHost: true });
+
+        io.emit('connect4RoomAvailable', {
+            roomId,
+            hostName: user.username,
+            playerCount: 1
+        });
+
+        console.log('四子棋房间创建:', roomId, user.username);
+    });
+
+    socket.on('joinConnect4Room', (data) => {
+        const { roomId, playerName } = data;
+        const room = connect4Rooms.get(roomId);
+        let user = users.get(socket.id);
+
+        if (!room || room.started) {
+            socket.emit('error', { message: '房间不存在或已结束' });
+            return;
+        }
+
+        if (room.players.length >= 2) {
+            socket.emit('error', { message: '房间已满' });
+            return;
+        }
+
+        if (!user && playerName) {
+            user = { 
+                username: playerName, 
+                ip: getUserIP(socket),
+                joinTime: new Date()
+            };
+            users.set(socket.id, user);
+        }
+
+        if (!user) {
+            socket.emit('error', { message: '请先登录聊天室' });
+            return;
+        }
+
+        // 清除待删除状态
+        if (room.pendingDelete) {
+            room.pendingDelete = false;
+            if (room.deleteTimeout) {
+                clearTimeout(room.deleteTimeout);
+                room.deleteTimeout = null;
+            }
+        }
+
+        room.players.push(socket.id);
+        room.playerNames.push(user.username);
+        room.playerIPs.push(user.ip);
+        socket.join(roomId);
+
+        socket.emit('connect4RoomCreated', { roomId, isHost: false });
+
+        // 更新房间信息
+        io.emit('connect4RoomUpdate', {
+            roomId,
+            hostName: room.playerNames[0],
+            playerCount: room.players.length
+        });
+
+        io.to(roomId).emit('waitingForConnect4Player', {
+            players: room.players.map((p, i) => ({ name: room.playerNames[i], isHost: i === 0 }))
+        });
+
+        if (room.players.length === 2) {
+            room.started = true;
+            room.startTime = new Date();
+            
+            io.to(roomId).emit('connect4GameStart', {
+                roomId,
+                players: room.playerNames,
+                currentTurn: 0
+            });
+
+            io.emit('connect4RoomStarted', { roomId });
+
+            io.emit('gameStart', {
+                text: `⚔️ ${room.playerNames[0]} VS ${room.playerNames[1]}`,
+                gameType: 'connect4',
+                players: room.playerNames,
+                time: new Date().toLocaleTimeString()
+            });
+
+            io.emit('connect4RoomEnded', { roomId });
+        }
+    });
+
+    socket.on('joinConnect4Game', (data) => {
+        const { roomId, playerName, isHost } = data;
+        const room = connect4Rooms.get(roomId);
+        
+        if (!room) {
+            socket.emit('error', { message: '房间不存在或已结束' });
+            return;
+        }
+
+        socket.join(roomId);
+        
+        // 找到该玩家在房间中的索引
+        const playerIndex = room.playerNames.indexOf(playerName);
+        if (playerIndex !== -1) {
+            // 更新该玩家的socketId（游戏窗口的socket）
+            room.players[playerIndex] = socket.id;
+        }
+
+        // 如果游戏已经开始，发送当前游戏状态
+        if (room.started) {
+            socket.emit('connect4GameStart', {
+                roomId,
+                players: room.playerNames,
+                currentTurn: room.currentTurn
+            });
+        } else {
+            io.to(roomId).emit('waitingForConnect4Player', {
+                players: room.players.map((p, i) => ({ name: room.playerNames[i], isHost: i === 0 }))
+            });
+
+            if (room.players.length === 2) {
+                room.started = true;
+                room.startTime = new Date();
+
+                io.to(roomId).emit('connect4GameStart', {
+                    roomId,
+                    players: room.playerNames,
+                    currentTurn: 0
+                });
+
+                io.emit('connect4RoomStarted', { roomId });
+
+                io.emit('gameStart', {
+                    text: `⚔️ ${room.playerNames[0]} VS ${room.playerNames[1]}`,
+                    gameType: 'connect4',
+                    players: room.playerNames,
+                    time: new Date().toLocaleTimeString()
+                });
+
+                io.emit('connect4RoomEnded', { roomId });
+            }
+        }
+    });
+
+    socket.on('connect4Move', (data) => {
+        const { roomId, col, color } = data;
+        const room = connect4Rooms.get(roomId);
+
+        if (!room || !room.started) return;
+
+        const playerIndex = room.players.indexOf(socket.id);
+        if (playerIndex !== room.currentTurn) return;
+
+        // 找到这一列最底部的空位
+        let row = -1;
+        for (let r = ROWS - 1; r >= 0; r--) {
+            if (!room.board[r][col]) {
+                row = r;
+                break;
+            }
+        }
+
+        if (row === -1) return; // 列已满
+
+        room.board[row][col] = color;
+
+        // 通知所有玩家
+        io.to(roomId).emit('connect4Move', { col, color, row });
+
+        // 检查胜负
+        if (checkConnect4Win(room.board, row, col, color)) {
+            const winnerIndex = color === 'yellow' ? 0 : 1;
+            const loserIndex = 1 - winnerIndex;
+            io.to(roomId).emit('connect4Win', { 
+                winner: winnerIndex, 
+                winnerName: room.playerNames[winnerIndex] 
+            });
+            io.emit('gameEnd', {
+                text: `🏆 四子棋：${room.playerNames[winnerIndex]} 战胜 ${room.playerNames[loserIndex]}`,
+                gameType: 'connect4',
+                winner: room.playerNames[winnerIndex],
+                loser: room.playerNames[loserIndex],
+                time: new Date().toLocaleTimeString()
+            });
+            io.emit('connect4RoomEnded', { roomId });
+            connect4Rooms.delete(roomId);
+            return;
+        }
+
+        // 检查平局
+        if (isBoardFull(room.board)) {
+            io.to(roomId).emit('connect4Draw');
+            io.emit('gameEnd', {
+                text: `🤝 四子棋：${room.playerNames[0]} 与 ${room.playerNames[1]} 握手言和`,
+                gameType: 'connect4',
+                isDraw: true,
+                players: room.playerNames,
+                time: new Date().toLocaleTimeString()
+            });
+            io.emit('connect4RoomEnded', { roomId });
+            connect4Rooms.delete(roomId);
+            return;
+        }
+
+        // 切换回合
+        room.currentTurn = room.currentTurn === 0 ? 1 : 0;
+    });
+
+    socket.on('connect4Hover', (data) => {
+        const { roomId, col, color } = data;
+        const room = connect4Rooms.get(roomId);
+        if (!room || !room.started) return;
+        socket.to(roomId).emit('connect4Hover', { col, color });
+    });
+
+    socket.on('connect4HoverLeave', (data) => {
+        const { roomId } = data;
+        const room = connect4Rooms.get(roomId);
+        if (!room || !room.started) return;
+        socket.to(roomId).emit('connect4HoverLeave');
+    });
+
+    socket.on('connect4GameEnd', (data) => {
+        const { roomId, winnerName, reason } = data;
+        const room = connect4Rooms.get(roomId);
+        if (!room) return;
+        
+        const loserName = room.playerNames.find(name => name !== winnerName) || '对手';
+        
+        let message = '';
+        if (reason === 'surrender') {
+            message = `🏳️ 四子棋：${loserName} 认输，${winnerName} 获胜！`;
+        } else if (reason === 'disconnect') {
+            message = `👋 四子棋：${loserName} 断线，${winnerName} 获胜！`;
+        } else {
+            message = `🏆 四子棋：${winnerName} 获胜！`;
+        }
+        
+        io.emit('gameEnd', {
+            text: message,
+            gameType: 'connect4',
+            winner: winnerName,
+            loser: loserName,
+            time: new Date().toLocaleTimeString()
+        });
+        
+        io.emit('connect4RoomEnded', { roomId });
+        connect4Rooms.delete(roomId);
+    });
+
+    const ROWS = 6;
+    const COLS = 7;
+
+    function checkConnect4Win(board, row, col, color) {
+        const directions = [
+            [[0, 1], [0, -1]],   // 水平
+            [[1, 0], [-1, 0]],   // 垂直
+            [[1, 1], [-1, -1]], // 对角线 \
+            [[1, -1], [-1, 1]]  // 对角线 /
+        ];
+
+        for (const [dir1, dir2] of directions) {
+            let count = 1;
+
+            // 正方向
+            let r = row + dir1[0];
+            let c = col + dir1[1];
+            while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === color) {
+                count++;
+                r += dir1[0];
+                c += dir1[1];
+            }
+
+            // 反方向
+            r = row + dir2[0];
+            c = col + dir2[1];
+            while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === color) {
+                count++;
+                r += dir2[0];
+                c += dir2[1];
+            }
+
+            if (count >= 4) return true;
+        }
+
+        return false;
+    }
+
+    function isBoardFull(board) {
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (!board[r][c]) return false;
+            }
+        }
+        return true;
+    }
 
     socket.on('teamInvite', (data) => {
         const user = users.get(socket.id);
