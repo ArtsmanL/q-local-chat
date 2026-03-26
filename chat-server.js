@@ -967,11 +967,46 @@ io.on('connection', (socket) => {
         
         gameRooms.forEach((room, roomId) => {
             if (room.players.includes(socket.id)) {
-                const otherPlayer = room.players.find(id => id !== socket.id);
-                if (otherPlayer) {
-                    io.to(otherPlayer).emit('opponentDisconnected');
+                const playerIndex = room.players.indexOf(socket.id);
+                if (room.started) {
+                    const otherPlayer = room.players.find(id => id !== socket.id);
+                    if (otherPlayer) {
+                        io.to(otherPlayer).emit('opponentDisconnected');
+                    }
+                    const winnerIndex = playerIndex === 0 ? 1 : 0;
+                    const winnerName = room.playerNames[winnerIndex];
+                    io.emit('gameResult', {
+                        text: `🎯 五子棋结束！\n⚠️ 对手断线\n🏆 ${winnerName} 获胜！`,
+                        gameType: 'gomoku',
+                        winner: winnerName,
+                        players: room.playerNames,
+                        time: new Date().toLocaleTimeString()
+                    });
+                    gameRooms.delete(roomId);
+                    io.emit('gomokuRoomEnded', { roomId });
+                } else {
+                    room.players.splice(playerIndex, 1);
+                    room.playerNames.splice(playerIndex, 1);
+                    room.playerIPs.splice(playerIndex, 1);
+                    socket.leave(roomId);
+                    if (room.players.length === 0) {
+                        room.pendingDelete = true;
+                        room.deleteTimeout = setTimeout(() => {
+                            const r = gameRooms.get(roomId);
+                            if (r && r.pendingDelete && r.players.length === 0) {
+                                gameRooms.delete(roomId);
+                                io.emit('gomokuRoomEnded', { roomId });
+                            }
+                        }, 30000);
+                    } else {
+                        room.host = room.players[0];
+                        io.emit('gomokuRoomUpdate', {
+                            roomId,
+                            hostName: room.playerNames[0],
+                            playerCount: room.players.length
+                        });
+                    }
                 }
-                gameRooms.delete(roomId);
             }
         });
 

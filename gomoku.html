@@ -347,7 +347,7 @@
     </div>
 
     <div class="game-actions">
-        <button class="game-btn secondary" id="closeBtn">认输退出</button>
+        <button class="game-btn secondary" id="closeBtn">退出等待</button>
     </div>
 
     <div class="result-modal" id="resultModal">
@@ -748,11 +748,13 @@
                     gameStatus.className = 'game-status waiting';
                     document.querySelector('#playerBlack .player-name').textContent = playerName + '（黑方）';
                     document.querySelector('#playerWhite .player-name').textContent = '等待中...';
+                    closeBtn.textContent = '退出等待';
                 }
             });
 
             socket.on('gomokuGameStart', (data) => {
                 waitingForOpponent = false;
+                closeBtn.textContent = '认输退出';
                 myColor = isHost ? 'black' : 'white';
                 
                 const playerNames = data.players;
@@ -883,6 +885,11 @@
         closeBtn.addEventListener('click', () => {
             if (isSpectator) {
                 closeGame();
+            } else if (waitingForOpponent) {
+                if (confirm('确定要退出等待吗？')) {
+                    socket.emit('leaveGomokuRoom', { roomId });
+                    setTimeout(() => window.close(), 100);
+                }
             } else if (!gameOver) {
                 if (confirm('确定要认输吗？')) {
                     endGame('surrender');
